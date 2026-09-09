@@ -9,7 +9,7 @@ policyDefaults:
   placement:
     clusterSelectors:
       aiwl: "true"
-      tnc-ver: "tnc6.1"
+      tnc-ver: "tnc7.0"
   remediationAction: "inform"
 policies:
   # unpause baseline configuration

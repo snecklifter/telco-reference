@@ -57,9 +57,9 @@ These policy generators use labels to apply the policies to the appropriate clus
 Apply the following labels to the clusters in order to configure them with the appropriate policies:
 
 - common: "core"       - To apply the RDS baseline and overlay policies
-- version: "4.20"      - To pick the RDS 4.20 policies
+- version: "4.22"      - To pick the RDS 4.22 policies
 - cwl: "true"          - To apply the TNC CWL policies
-- tnc-ver: "tnc6.1"    - To pick TNC 6.1 policies
+- tnc-ver: "tnc7.0"    - To pick TNC 7.0 policies
 - Pick one the following:
   - odf-ext: "true"    - To configure ODF in external mode
   - odf-int: "true"    - To configure ODF in internal mode

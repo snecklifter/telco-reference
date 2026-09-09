@@ -13,6 +13,6 @@ generators:
 # - vewl-odf-external.yaml
 resources:
 - template-values/cwl-site3.yaml
-#- clusterimageset42016.yaml
+#- clusterimageset42212.yaml
 #- template-values/regional.yaml
 #- template-values/hw-types.yaml

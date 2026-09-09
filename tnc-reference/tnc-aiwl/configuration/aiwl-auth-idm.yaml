@@ -1,18 +1,18 @@
 apiVersion: policy.open-cluster-management.io/v1
 kind: PolicyGenerator
 metadata:
-  name: aiwl-auth-idm-tnc61
+  name: aiwl-auth-idm-tnc70
 policyDefaults:
   namespace: ztp-core-policies
   policySets: []
   placement:
     clusterSelectors:
       aiwl: "true"
-      tnc-ver: "tnc6.1"
+      tnc-ver: "tnc7.0"
       idm: "true"
   remediationAction: "inform"
 policies:
-  - name: aiwl-auth-idm-tnc61
+  - name: aiwl-auth-idm-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "50"  
     manifests:
@@ -64,7 +64,7 @@ policies:
                 key: '{{hub (printf "%s" .ManagedClusterName) hub}}/ldap-group-sync-creds'
     - path: other-crs/optional/AUTH/IDM/AuthOauth.yaml
 
-  - name: aiwl-post-auth-idm-tnc61
+  - name: aiwl-post-auth-idm-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "99"  
     complianceType: mustnothave

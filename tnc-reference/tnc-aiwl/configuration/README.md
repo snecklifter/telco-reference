@@ -53,7 +53,7 @@ These policy generators use labels to apply the policies to the appropriate clus
 Apply the following labels to the clusters in order to configure them with the appropriate policies:
 
 - aiwl: "true"        - To apply the TNC AIWL policies
-- tnc-ver: "tnc6.1"  - To pick TNC 6.1 policies
+- tnc-ver: "tnc7.0"  - To pick TNC 7.0 policies
 - Pick one the following:
   - odf-ext: "true"    - To configure ODF in external mode
   - odf-int: "true"    - To configure ODF in internal mode

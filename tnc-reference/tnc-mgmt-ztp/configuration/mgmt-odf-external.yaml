@@ -1,18 +1,18 @@
 apiVersion: policy.open-cluster-management.io/v1
 kind: PolicyGenerator
 metadata:
-  name: odf-ext-tnc61
+  name: odf-ext-tnc70
 policyDefaults:
   namespace: ztp-core-policies
   policySets: []
   placement:
     clusterSelectors:
       mgmt: "true"
-      tnc-ver: "tnc6.1"
+      tnc-ver: "tnc7.0"
       odf-ext: "true"
   remediationAction: "inform"
 policies:
-  - name: config-odf-ext-tnc61
+  - name: config-odf-ext-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "8"
     manifests:
@@ -28,7 +28,7 @@ policies:
               name: ocs-external-storagecluster-ceph-rbd
       - path: other-crs/optional/ODF/OdfConsole.yaml
 
-  - name: config-other-ext-tnc61
+  - name: config-other-ext-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "12"
     manifests:

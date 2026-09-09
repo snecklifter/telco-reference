@@ -78,9 +78,9 @@ Apply the following labels to ManagedClusters to configure them with the
 appropriate VEWL policies:
 
 - `common: "core"` — To apply the RDS baseline and overlay policies
-- `version: "4.20"` — To pick the RDS 4.20 policies
+- `version: "4.22"` — To pick the RDS 4.22 policies
 - `vewl: "true"` — To apply the TNC VEWL policies
-- `tnc-ver: "tnc6.1"` — To pick TNC 6.1 policies
+- `tnc-ver: "tnc7.0"` — To pick TNC 7.0 policies
 - Pick one of the following:
   - `odf-ext: "true"` — To configure ODF in external mode
   - `odf-int: "true"` — To configure ODF in internal mode

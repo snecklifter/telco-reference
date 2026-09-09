@@ -7,17 +7,17 @@
 apiVersion: policy.open-cluster-management.io/v1
 kind: PolicyGenerator
 metadata:
-  name: rhoso-networkisolation-tnc61
+  name: rhoso-networkisolation-tnc70
 policyDefaults:
   namespace: ztp-core-policies
   policySets: []
   placement:
     clusterSelectors:
       rhoso: "true"
-      tnc-ver: "tnc6.1"
+      tnc-ver: "tnc7.0"
   remediationAction: "inform"
 policies:
-  - name: rhoso-config-networkisolation-tnc61
+  - name: rhoso-config-networkisolation-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "8"
     manifests:

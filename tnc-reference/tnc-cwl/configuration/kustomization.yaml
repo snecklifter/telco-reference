@@ -12,7 +12,7 @@ generators:
 - cwl-auth-idm.yaml
 - core-finish.yaml
 resources:
-- clusterimageset42016.yaml
+- clusterimageset42212.yaml
 - resources
 - template-values/regional.yaml
 - template-values/hw-types.yaml

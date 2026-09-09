@@ -18,7 +18,7 @@ spec:
         spec:
           containers:
           - name: ldap-group-sync
-            image: '{{hub fromConfigMap "" .ManagedClusterName "registry-fqdn" hub}}/ocp/ocp4/openshift4/ose-tools-rhel9:v4.20'
+            image: '{{hub fromConfigMap "" .ManagedClusterName "registry-fqdn" hub}}/ocp/ocp4/openshift4/ose-tools-rhel9:v4.22'
             command:
             - /bin/bash
             - -c

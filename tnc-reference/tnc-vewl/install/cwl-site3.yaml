@@ -7,7 +7,7 @@ spec:
   baseDomain: "example.com"
   pullSecretRef:
     name: "assisted-deployment-pull-secret"
-  clusterImageSetNameRef: "openshift-4.20.16-disconnected"
+  clusterImageSetNameRef: "openshift-4.22.12-disconnected"
   sshPublicKey: "ssh-rsa AAAAB3NzaC1yc2EA..."
   clusterName: "cwl-site3"
   networkType: "OVNKubernetes"
@@ -19,10 +19,10 @@ spec:
   extraLabels:
     ManagedCluster:
       common: "core"
-      version: "4.20"
+      version: "4.22"
       region: "zone-1"
       vewl: "true"
-      tnc-ver: "tnc6.1"
+      tnc-ver: "tnc7.0"
       odf-ext: "true"
       #odf-int: "true"
   clusterNetwork:

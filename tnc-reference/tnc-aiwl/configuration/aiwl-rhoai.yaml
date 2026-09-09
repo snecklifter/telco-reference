@@ -1,17 +1,17 @@
 apiVersion: policy.open-cluster-management.io/v1
 kind: PolicyGenerator
 metadata:
-  name: rhoai-tnc61
+  name: rhoai-tnc70
 policyDefaults:
   namespace: ztp-core-policies
   policySets: []
   placement:
     clusterSelectors:
       aiwl: "true"
-      tnc-ver: "tnc6.1"
+      tnc-ver: "tnc7.0"
   remediationAction: "inform"
 policies:
-  - name: rhoai-prereq-tnc61
+  - name: rhoai-prereq-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "20"
     manifests:
@@ -36,7 +36,7 @@ policies:
 #OSSM
     - path: other-crs/optional/OSSM/OssmSubscription.yaml
 
-  - name: rhoai-prereq-config-tnc61
+  - name: rhoai-prereq-config-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "25"
     manifests:
@@ -47,7 +47,7 @@ policies:
             operand:
               image: registry.redhat.io/openshift4/ose-node-feature-discovery-rhel9@sha256:ae6e36fc085492e368a431d3d4df4088fe5b11d2f030e36662aa9001ea18c71e
 
-  - name: nvidia-tnc61
+  - name: nvidia-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "30"
     manifests:
@@ -56,7 +56,7 @@ policies:
     - path: other-crs/optional/NVDIA/NvidiaSubscription.yaml
     - path: other-crs/optional/NVDIA/clusterPolicy.json
 
-  - name: rhoai-operator-tnc61
+  - name: rhoai-operator-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "35"
     manifests:
@@ -67,7 +67,7 @@ policies:
         - spec:
             channel: stable-3.x
 
-  - name: rhoai-config-tnc61
+  - name: rhoai-config-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "40"
     manifests:

@@ -1,17 +1,17 @@
 apiVersion: policy.open-cluster-management.io/v1
 kind: PolicyGenerator
 metadata:
-  name: cwl-additions-tnc61
+  name: cwl-additions-tnc70
 policyDefaults:
   namespace: ztp-core-policies
   policySets: []
   placement:
     clusterSelectors:
       cwl: "true"
-      tnc-ver: "tnc6.1"
+      tnc-ver: "tnc7.0"
   remediationAction: "inform"
 policies:
-  - name: cwl-cluster-config-tnc61
+  - name: cwl-cluster-config-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "1" 
     manifests:
@@ -21,10 +21,10 @@ policies:
             name: certified-operators-disconnected
           spec:
             displayName:  Certified Disconnected Operators Catalog
-            image: '{{hub fromConfigMap "" .ManagedClusterName "registry-fqdn" hub}}/ocp/ocp4/redhat/certified-operator-index:v4.20'
+            image: '{{hub fromConfigMap "" .ManagedClusterName "registry-fqdn" hub}}/ocp/ocp4/redhat/certified-operator-index:v4.22'
 
   # Operators added by TNC on top of RDS baseline
-  - name: cwl-operator-subs-tnc61
+  - name: cwl-operator-subs-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "5"
     manifests:
@@ -37,7 +37,7 @@ policies:
         patches:
         - spec:
             installPlanApproval: Manual
-            channel: stable-6.2
+            channel: stable-6.6
 #ESO
       - path: other-crs/required/vault/ESO/ESONS.yaml
       - path: other-crs/required/vault/ESO/ESOOperGroup.yaml
@@ -79,7 +79,7 @@ policies:
           - spec:
               installPlanApproval: Manual
 
-  - name: cwl-operator-config-tnc61
+  - name: cwl-operator-config-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "9"
     manifests:

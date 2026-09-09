@@ -13,6 +13,6 @@ generators:
 - mgmt-optional.yaml
 - mgmt-finish.yaml
 resources:
-- clusterimageset42016.yaml
+- clusterimageset42212.yaml
 - resources
 - template-values/mgmt1.yaml

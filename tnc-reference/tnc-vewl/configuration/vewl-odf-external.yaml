@@ -1,18 +1,18 @@
 apiVersion: policy.open-cluster-management.io/v1
 kind: PolicyGenerator
 metadata:
-  name: vodf-ext-tnc61
+  name: vodf-ext-tnc70
 policyDefaults:
   namespace: ztp-core-policies
   policySets: []
   placement:
     clusterSelectors:
       vewl: "true"
-      tnc-ver: "tnc6.1"
+      tnc-ver: "tnc7.0"
       odf-ext: "true"
   remediationAction: "inform"
 policies:
-  - name: vconfig-odf-ext-tnc61
+  - name: vconfig-odf-ext-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "8"
     manifests:
@@ -40,7 +40,7 @@ policies:
                 addresses:
                 - 10.0.0.0-10.0.0.10
 
-  - name: vconfig-other-ext-tnc61
+  - name: vconfig-other-ext-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "10"
     manifests:

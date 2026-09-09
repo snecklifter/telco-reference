@@ -1,18 +1,18 @@
 apiVersion: policy.open-cluster-management.io/v1
 kind: PolicyGenerator
 metadata:
-  name: mgmt-lvms-tnc61
+  name: mgmt-lvms-tnc70
 policyDefaults:
   namespace: ztp-core-policies
   policySets: []
   placement:
     clusterSelectors:
       mgmt: "true"
-      tnc-ver: "tnc6.1"
+      tnc-ver: "tnc7.0"
       lvms: "true"
   remediationAction: "inform"
 policies:
-  - name: lvms-storage-tnc61
+  - name: lvms-storage-tnc70
     policyAnnotations:
       ran.openshift.io/ztp-deploy-wave: "5"
     manifests:
