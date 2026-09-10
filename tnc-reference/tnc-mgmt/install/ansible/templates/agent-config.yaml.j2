@@ -3,7 +3,7 @@ apiVersion: v1alpha1
 kind: AgentConfig
 metadata:
   name: {{ cluster.name }}
-rendezvousIP: {{ (hosts | selectattr('role', 'equalto', 'master') | first).vlan_ip }}
+rendezvousIP: {{ (hosts | selectattr('role', 'equalto', 'master') | first).ip }}
 
 hosts:
 {%- for host in hosts %}
@@ -21,11 +21,17 @@ hosts:
         type: bond
         state: up
         mtu: {{ networking.mtu }}
+{%- if networking.vlan_id is not defined %}
         ipv4:
           address:
-          - ip: {{ host.bond0_ip }}
-            prefix-length: {{ networking.bond_prefix_length }}
+          - ip: {{ host.ip }}
+            prefix-length: {{ networking.prefix_length }}
           enabled: true
+{%- else %}
+        ipv4:
+          enabled: true
+          dhcp: false
+{%- endif %}
         ipv6:
           enabled: false
         link-aggregation:
@@ -36,6 +42,7 @@ hosts:
 {%- for iface in host.interfaces | selectattr('bond', 'equalto', 'bond0') %}
             - {{ iface.name }}
 {%- endfor %}
+{%- if networking.vlan_id is defined %}
       - name: bond0.{{ networking.vlan_id }}
         type: vlan
         state: up
@@ -45,11 +52,13 @@ hosts:
           id: {{ networking.vlan_id }}
         ipv4:
           address:
-          - ip: {{ host.vlan_ip }}
-            prefix-length: {{ networking.vlan_prefix_length }}
+          - ip: {{ host.ip }}
+            prefix-length: {{ networking.prefix_length }}
           enabled: true
         ipv6:
           enabled: false
+{%- endif %}
+{%- if host.interfaces | selectattr('bond', 'equalto', 'bond1') | list | length > 0 %}
       - name: bond1
         description: "Bond 1"
         type: bond
@@ -67,6 +76,7 @@ hosts:
 {%- for iface in host.interfaces | selectattr('bond', 'equalto', 'bond1') %}
             - {{ iface.name }}
 {%- endfor %}
+{%- endif %}
 {%- for iface in host.interfaces %}
       - name: {{ iface.name }}
         type: ethernet
@@ -87,7 +97,11 @@ hosts:
         config:
           - destination: 0.0.0.0/0
             next-hop-address: {{ networking.default_gateway }}
+{%- if networking.vlan_id is defined %}
             next-hop-interface: bond0.{{ networking.vlan_id }}
+{%- else %}
+            next-hop-interface: bond0
+{%- endif %}
     rootDeviceHints:
       deviceName: "{{ host.root_device }}"
 {%- endfor %}

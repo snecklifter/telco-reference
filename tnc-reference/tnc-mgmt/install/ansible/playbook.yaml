@@ -18,12 +18,11 @@
           - hosts | selectattr('role', 'equalto', 'worker') | list | length >= 0
         fail_msg: "Exactly 3 master nodes are required"
 
-    - name: Validate each host has interfaces assigned to both bonds
+    - name: Validate each host has interfaces assigned to bond0
       ansible.builtin.assert:
         that:
           - item.interfaces | selectattr('bond', 'equalto', 'bond0') | list | length >= 1
-          - item.interfaces | selectattr('bond', 'equalto', 'bond1') | list | length >= 1
-        fail_msg: "Host {{ item.hostname }} must have interfaces in both bond0 and bond1"
+        fail_msg: "Host {{ item.hostname }} must have at least one interface in bond0"
       loop: "{{ hosts }}"
       loop_control:
         label: "{{ item.hostname }}"
