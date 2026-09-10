@@ -1,0 +1,152 @@
+---
+cluster:
+  name: mgmt1
+  base_domain: example.com
+
+networking:
+  cluster_network_cidr: 10.128.0.0/14
+  cluster_network_host_prefix: 23
+  machine_network_cidr: 172.31.61.0/24
+  service_network_cidr: 172.30.0.0/16
+  api_vip: 172.31.61.4
+  ingress_vip: 172.31.61.5
+
+  mtu: 8950
+  vlan_id: 61
+  vlan_prefix_length: 24
+  bond_prefix_length: 24
+  bond_mode: "802.3ad"
+  bond_miimon: "1000"
+
+  dns_servers:
+    - 192.0.2.4
+  default_gateway: 172.31.61.1
+
+mirror_registry:
+  url: registry.bastion.example.com:9500
+  release_path: ocp/ocp4/openshift/release
+  release_images_path: ocp/ocp4/openshift/release-images
+  ca_bundle: |
+    -----BEGIN CERTIFICATE-----
+    REDACTED
+    -----END CERTIFICATE-----
+
+pull_secret: '{"auths":{"registry.bastion.example.com:9500":{"auth":"REDACTED","email":"user@redhat.com"}}}'
+
+ssh_key: |
+  ssh-rsa AAAAB3NzaC1yc2EA...
+
+hosts:
+  - hostname: control-0
+    role: master
+    bond0_ip: 10.63.63.6
+    vlan_ip: 172.31.61.6
+    root_device: "/dev/disk/by-path/pci-0000:3f:00.0-scsi-0:0:1:0"
+    interfaces:
+      - name: eno12399
+        mac: "30:3E:A7:03:04:70"
+        bond: bond0
+      - name: eno12409
+        mac: "30:3E:A7:03:04:71"
+        bond: bond0
+      - name: eno12419
+        mac: "30:3E:A7:03:04:72"
+        bond: bond1
+      - name: eno12429
+        mac: "30:3E:A7:03:04:73"
+        bond: bond1
+
+  - hostname: control-1
+    role: master
+    bond0_ip: 10.63.63.7
+    vlan_ip: 172.31.61.7
+    root_device: "/dev/disk/by-path/pci-0000:3f:00.0-scsi-0:0:1:0"
+    interfaces:
+      - name: eno12399
+        mac: "30:3E:A7:02:FD:C0"
+        bond: bond0
+      - name: eno12409
+        mac: "30:3E:A7:02:FD:C1"
+        bond: bond0
+      - name: eno12419
+        mac: "30:3E:A7:02:FD:C2"
+        bond: bond1
+      - name: eno12429
+        mac: "30:3E:A7:02:FD:C3"
+        bond: bond1
+
+  - hostname: control-2
+    role: master
+    bond0_ip: 10.63.63.8
+    vlan_ip: 172.31.61.8
+    root_device: "/dev/disk/by-path/pci-0000:3f:00.0-scsi-0:0:1:0"
+    interfaces:
+      - name: eno12399
+        mac: "30:3E:A7:03:0A:40"
+        bond: bond0
+      - name: eno12409
+        mac: "30:3E:A7:03:0A:41"
+        bond: bond0
+      - name: eno12419
+        mac: "30:3E:A7:03:0A:42"
+        bond: bond1
+      - name: eno12429
+        mac: "30:3E:A7:03:0A:43"
+        bond: bond1
+
+  - hostname: worker-0
+    role: worker
+    bond0_ip: 10.63.63.9
+    vlan_ip: 172.31.61.9
+    root_device: "/dev/disk/by-path/pci-0000:3f:00.0-scsi-0:0:1:0"
+    interfaces:
+      - name: eno12399
+        mac: "AA:BB:CC:DD:EE:01"
+        bond: bond0
+      - name: eno12409
+        mac: "AA:BB:CC:DD:EE:02"
+        bond: bond0
+      - name: eno12419
+        mac: "AA:BB:CC:DD:EE:03"
+        bond: bond1
+      - name: eno12429
+        mac: "AA:BB:CC:DD:EE:04"
+        bond: bond1
+
+  - hostname: worker-1
+    role: worker
+    bond0_ip: 10.63.63.10
+    vlan_ip: 172.31.61.10
+    root_device: "/dev/disk/by-path/pci-0000:3f:00.0-scsi-0:0:1:0"
+    interfaces:
+      - name: eno12399
+        mac: "AA:BB:CC:DD:EE:05"
+        bond: bond0
+      - name: eno12409
+        mac: "AA:BB:CC:DD:EE:06"
+        bond: bond0
+      - name: eno12419
+        mac: "AA:BB:CC:DD:EE:07"
+        bond: bond1
+      - name: eno12429
+        mac: "AA:BB:CC:DD:EE:08"
+        bond: bond1
+
+  - hostname: worker-2
+    role: worker
+    bond0_ip: 10.63.63.11
+    vlan_ip: 172.31.61.11
+    root_device: "/dev/disk/by-path/pci-0000:3f:00.0-scsi-0:0:1:0"
+    interfaces:
+      - name: eno12399
+        mac: "AA:BB:CC:DD:EE:09"
+        bond: bond0
+      - name: eno12409
+        mac: "AA:BB:CC:DD:EE:0A"
+        bond: bond0
+      - name: eno12419
+        mac: "AA:BB:CC:DD:EE:0B"
+        bond: bond1
+      - name: eno12429
+        mac: "AA:BB:CC:DD:EE:0C"
+        bond: bond1

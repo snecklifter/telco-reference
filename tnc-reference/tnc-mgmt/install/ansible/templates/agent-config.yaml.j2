@@ -1,0 +1,93 @@
+---
+apiVersion: v1alpha1
+kind: AgentConfig
+metadata:
+  name: {{ cluster.name }}
+rendezvousIP: {{ (hosts | selectattr('role', 'equalto', 'master') | first).vlan_ip }}
+
+hosts:
+{%- for host in hosts %}
+  - hostname: {{ host.hostname }}
+    role: {{ host.role }}
+    interfaces:
+{%- for iface in host.interfaces %}
+      - name: "{{ iface.name }}"
+        macAddress: "{{ iface.mac }}"
+{%- endfor %}
+    networkConfig:
+      interfaces:
+      - name: bond0
+        description: "Bond 0"
+        type: bond
+        state: up
+        mtu: {{ networking.mtu }}
+        ipv4:
+          address:
+          - ip: {{ host.bond0_ip }}
+            prefix-length: {{ networking.bond_prefix_length }}
+          enabled: true
+        ipv6:
+          enabled: false
+        link-aggregation:
+          mode: '{{ networking.bond_mode }}'
+          options:
+            miimon: '{{ networking.bond_miimon }}'
+          port:
+{%- for iface in host.interfaces | selectattr('bond', 'equalto', 'bond0') %}
+            - {{ iface.name }}
+{%- endfor %}
+      - name: bond0.{{ networking.vlan_id }}
+        type: vlan
+        state: up
+        mtu: {{ networking.mtu }}
+        vlan:
+          base-iface: bond0
+          id: {{ networking.vlan_id }}
+        ipv4:
+          address:
+          - ip: {{ host.vlan_ip }}
+            prefix-length: {{ networking.vlan_prefix_length }}
+          enabled: true
+        ipv6:
+          enabled: false
+      - name: bond1
+        description: "Bond 1"
+        type: bond
+        state: up
+        mtu: {{ networking.mtu }}
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+        link-aggregation:
+          mode: '{{ networking.bond_mode }}'
+          options:
+            miimon: '{{ networking.bond_miimon }}'
+          port:
+{%- for iface in host.interfaces | selectattr('bond', 'equalto', 'bond1') %}
+            - {{ iface.name }}
+{%- endfor %}
+{%- for iface in host.interfaces %}
+      - name: {{ iface.name }}
+        type: ethernet
+        state: up
+        mtu: {{ networking.mtu }}
+        ipv4:
+          enabled: false
+        ipv6:
+          enabled: false
+{%- endfor %}
+      dns-resolver:
+        config:
+          server:
+{%- for dns in networking.dns_servers %}
+            - {{ dns }}
+{%- endfor %}
+      routes:
+        config:
+          - destination: 0.0.0.0/0
+            next-hop-address: {{ networking.default_gateway }}
+            next-hop-interface: bond0.{{ networking.vlan_id }}
+    rootDeviceHints:
+      deviceName: "{{ host.root_device }}"
+{%- endfor %}

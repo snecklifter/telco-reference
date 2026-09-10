@@ -1,0 +1,51 @@
+---
+- name: Generate OpenShift install manifests
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yaml
+
+  vars:
+    output_dir: "{{ playbook_dir }}/../openshift"
+
+  tasks:
+    - name: Validate host count
+      ansible.builtin.assert:
+        that:
+          - hosts | selectattr('role', 'equalto', 'master') | list | length == 3
+          - hosts | selectattr('role', 'equalto', 'worker') | list | length >= 0
+        fail_msg: "Exactly 3 master nodes are required"
+
+    - name: Validate each host has interfaces assigned to both bonds
+      ansible.builtin.assert:
+        that:
+          - item.interfaces | selectattr('bond', 'equalto', 'bond0') | list | length >= 1
+          - item.interfaces | selectattr('bond', 'equalto', 'bond1') | list | length >= 1
+        fail_msg: "Host {{ item.hostname }} must have interfaces in both bond0 and bond1"
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Generate install-config.yaml
+      ansible.builtin.template:
+        src: templates/install-config.yaml.j2
+        dest: "{{ output_dir }}/install-config.yaml"
+        mode: "0640"
+
+    - name: Generate agent-config.yaml
+      ansible.builtin.template:
+        src: templates/agent-config.yaml.j2
+        dest: "{{ output_dir }}/agent-config.yaml"
+        mode: "0640"
+
+    - name: Display summary
+      ansible.builtin.debug:
+        msg:
+          - "Cluster: {{ cluster.name }}.{{ cluster.base_domain }}"
+          - "Masters: {{ hosts | selectattr('role', 'equalto', 'master') | list | length }}"
+          - "Workers: {{ hosts | selectattr('role', 'equalto', 'worker') | list | length }}"
+          - "API VIP: {{ networking.api_vip }}"
+          - "Ingress VIP: {{ networking.ingress_vip }}"
+          - "Output: {{ output_dir }}"

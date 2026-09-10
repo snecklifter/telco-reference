@@ -1,0 +1,43 @@
+---
+apiVersion: v1
+metadata:
+  name: {{ cluster.name }}
+baseDomain: {{ cluster.base_domain }}
+compute:
+- architecture: amd64
+  hyperthreading: Enabled
+  name: worker
+  replicas: {{ hosts | selectattr('role', 'equalto', 'worker') | list | length }}
+controlPlane:
+  architecture: amd64
+  hyperthreading: Enabled
+  name: master
+  replicas: {{ hosts | selectattr('role', 'equalto', 'master') | list | length }}
+networking:
+  clusterNetwork:
+  - cidr: {{ networking.cluster_network_cidr }}
+    hostPrefix: {{ networking.cluster_network_host_prefix }}
+  machineNetwork:
+  - cidr: {{ networking.machine_network_cidr }}
+  networkType: OVNKubernetes
+  serviceNetwork:
+  - {{ networking.service_network_cidr }}
+platform:
+  baremetal:
+    provisioningNetwork: "Disabled"
+    apiVIPs:
+    - {{ networking.api_vip }}
+    ingressVIPs:
+    - {{ networking.ingress_vip }}
+imageDigestSources:
+  - mirrors:
+    - {{ mirror_registry.url }}/{{ mirror_registry.release_path }}
+    source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
+  - mirrors:
+    - {{ mirror_registry.url }}/{{ mirror_registry.release_images_path }}
+    source: quay.io/openshift-release-dev/ocp-release
+additionalTrustBundle: |
+{{ mirror_registry.ca_bundle | indent(2, first=true) }}
+pullSecret: '{{ pull_secret }}'
+sshKey: |
+{{ ssh_key | indent(2, first=true) }}
