@@ -19,6 +19,10 @@ networking:
   # Uncomment to use a VLAN sub-interface on bond0
   # vlan_id: 61
 
+  storage_network:
+    vlan_id: 62
+    prefix_length: 24
+
   dns_servers:
     - 192.0.2.4
   default_gateway: 172.31.61.1
@@ -62,6 +66,7 @@ hosts:
   - hostname: control-0
     role: master
     ip: 172.31.61.6
+    storage_ip: 172.31.62.6
     bmc_address: 192.168.1.100
     bmc_username: admin
     bmc_password: REDACTED
@@ -74,6 +79,7 @@ hosts:
   - hostname: control-1
     role: master
     ip: 172.31.61.7
+    storage_ip: 172.31.62.7
     bmc_address: 192.168.1.101
     bmc_username: admin
     bmc_password: REDACTED
@@ -86,6 +92,7 @@ hosts:
   - hostname: control-2
     role: master
     ip: 172.31.61.8
+    storage_ip: 172.31.62.8
     bmc_address: 192.168.1.102
     bmc_username: admin
     bmc_password: REDACTED
@@ -98,6 +105,7 @@ hosts:
   - hostname: worker-0
     role: worker
     ip: 172.31.61.9
+    storage_ip: 172.31.62.9
     bmc_address: 192.168.1.103
     bmc_username: admin
     bmc_password: REDACTED
@@ -110,6 +118,7 @@ hosts:
   - hostname: worker-1
     role: worker
     ip: 172.31.61.10
+    storage_ip: 172.31.62.10
     bmc_address: 192.168.1.104
     bmc_username: admin
     bmc_password: REDACTED
@@ -122,6 +131,7 @@ hosts:
   - hostname: worker-2
     role: worker
     ip: 172.31.61.11
+    storage_ip: 172.31.62.11
     bmc_address: 192.168.1.105
     bmc_username: admin
     bmc_password: REDACTED

@@ -76,6 +76,22 @@ hosts:
 {%- for layout in interface_layout | selectattr('bond', 'equalto', 'bond1') %}
             - {{ layout.name }}
 {%- endfor %}
+{%- if networking.storage_network is defined and host.storage_ip is defined %}
+      - name: bond1.{{ networking.storage_network.vlan_id }}
+        type: vlan
+        state: up
+        mtu: {{ networking.mtu }}
+        vlan:
+          base-iface: bond1
+          id: {{ networking.storage_network.vlan_id }}
+        ipv4:
+          address:
+          - ip: {{ host.storage_ip }}
+            prefix-length: {{ networking.storage_network.prefix_length }}
+          enabled: true
+        ipv6:
+          enabled: false
+{%- endif %}
 {%- endif %}
 {%- for layout in interface_layout %}
       - name: {{ layout.name }}
