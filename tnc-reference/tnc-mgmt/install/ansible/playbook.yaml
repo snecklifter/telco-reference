@@ -192,18 +192,15 @@
       ansible.builtin.pause:
         seconds: 5
 
-    - name: Copy container named.conf for debugging
-      ansible.builtin.command: podman cp dns-server:/etc/named.conf /tmp/container-named.conf
+    - name: Show BIND container logs
+      ansible.builtin.command: podman logs dns-server
       become: true
-
-    - name: Read container named.conf
-      ansible.builtin.command: cat /tmp/container-named.conf
-      register: container_named_conf
+      register: bind_logs
       changed_when: false
 
-    - name: Display container named.conf
+    - name: Display BIND logs
       ansible.builtin.debug:
-        var: container_named_conf.stdout_lines
+        var: bind_logs.stderr_lines
 
     - name: Verify DNS resolves api record
       ansible.builtin.command: >
