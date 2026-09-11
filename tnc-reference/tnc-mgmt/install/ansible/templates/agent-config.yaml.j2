@@ -103,5 +103,9 @@ hosts:
             next-hop-interface: bond0
 {%- endif %}
     rootDeviceHints:
+{%- if storage is defined and storage.os_disks is defined %}
+      deviceName: "{{ storage.os_disks[0] }}"
+{%- else %}
       deviceName: "{{ host.root_device }}"
+{%- endif %}
 {%- endfor %}

@@ -9,6 +9,7 @@
 
   vars:
     output_dir: "{{ playbook_dir }}/../openshift"
+    raid_enabled: "{{ storage is defined and storage.os_disks is defined and storage.os_disks | length > 1 }}"
 
   tasks:
     - name: Validate host count
@@ -39,6 +40,19 @@
         dest: "{{ output_dir }}/agent-config.yaml"
         mode: "0640"
 
+    - name: Generate RAID mirror MachineConfig
+      ansible.builtin.template:
+        src: templates/raid-mirror.yaml.j2
+        dest: "{{ output_dir }}/98-{{ item }}-raid1-mirror.yaml"
+        mode: "0640"
+      vars:
+        role: "{{ item }}"
+      loop: "{{ roles_in_use }}"
+      when: raid_enabled | bool
+      vars:
+        roles_in_use: >-
+          {{ hosts | map(attribute='role') | unique | list }}
+
     - name: Display summary
       ansible.builtin.debug:
         msg:
@@ -47,4 +61,5 @@
           - "Workers: {{ hosts | selectattr('role', 'equalto', 'worker') | list | length }}"
           - "API VIP: {{ networking.api_vip }}"
           - "Ingress VIP: {{ networking.ingress_vip }}"
+          - "RAID: {{ 'enabled (' + storage.os_disks | join(' + ') + ')' if raid_enabled | bool else 'disabled' }}"
           - "Output: {{ output_dir }}"
