@@ -53,7 +53,45 @@
       loop_control:
         label: "{{ item.hostname }}"
 
-    - name: Check openshift-install is available
+    - name: Check if openshift-install is present
+      ansible.builtin.command: "{{ installer_binary }} version"
+      changed_when: false
+      register: installer_check
+      ignore_errors: true
+
+    - name: Download openshift-install
+      ansible.builtin.get_url:
+        url: "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/{{ cluster.ocp_version }}/openshift-install-linux.tar.gz"
+        dest: /tmp/openshift-install-linux.tar.gz
+        mode: "0644"
+      when: installer_check.rc != 0
+
+    - name: Download OpenShift client (oc)
+      ansible.builtin.get_url:
+        url: "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/{{ cluster.ocp_version }}/openshift-client-linux.tar.gz"
+        dest: /tmp/openshift-client-linux.tar.gz
+        mode: "0644"
+      when: installer_check.rc != 0
+
+    - name: Install openshift-install
+      ansible.builtin.unarchive:
+        src: /tmp/openshift-install-linux.tar.gz
+        dest: /usr/local/bin/
+        remote_src: true
+        mode: "0755"
+      become: true
+      when: installer_check.rc != 0
+
+    - name: Install oc client
+      ansible.builtin.unarchive:
+        src: /tmp/openshift-client-linux.tar.gz
+        dest: /usr/local/bin/
+        remote_src: true
+        mode: "0755"
+      become: true
+      when: installer_check.rc != 0
+
+    - name: Verify openshift-install version
       ansible.builtin.command: "{{ installer_binary }} version"
       changed_when: false
 

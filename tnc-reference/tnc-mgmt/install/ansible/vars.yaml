@@ -2,6 +2,7 @@
 cluster:
   name: mgmt1
   base_domain: example.com
+  ocp_version: stable-4.22
 
 networking:
   cluster_network_cidr: 10.128.0.0/14
