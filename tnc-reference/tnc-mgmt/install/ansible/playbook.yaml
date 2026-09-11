@@ -9,7 +9,6 @@
 
   vars:
     build_dir: "{{ playbook_dir }}/../build"
-    dns_dir: "{{ playbook_dir }}/../dns"
     extra_manifests_dir: "{{ playbook_dir }}/../openshift/openshift"
     installer_binary: openshift-install
     raid_enabled: "{{ storage is defined and storage.os_disks is defined and storage.os_disks | length > 1 }}"
@@ -136,29 +135,29 @@
 
     # --- DNS Server ---
 
-    - name: Create DNS config directory
-      ansible.builtin.file:
-        path: "{{ dns_dir }}"
-        state: directory
-        mode: "0755"
+    - name: Install bind
+      ansible.builtin.dnf:
+        name: bind
+        state: present
+      become: true
 
     - name: Generate named.conf
       ansible.builtin.template:
         src: templates/named.conf.j2
-        dest: "{{ dns_dir }}/named.conf"
-        mode: "0644"
+        dest: /etc/named.conf
+        mode: "0640"
+        owner: root
+        group: named
+      become: true
 
     - name: Generate zone file
       ansible.builtin.template:
         src: templates/zone.db.j2
-        dest: "{{ dns_dir }}/{{ cluster.name }}.{{ cluster.base_domain }}.zone"
-        mode: "0644"
-
-    - name: Remove existing DNS container
-      ansible.builtin.command: podman rm -f dns-server
+        dest: "/var/named/{{ cluster.name }}.{{ cluster.base_domain }}.zone"
+        mode: "0640"
+        owner: root
+        group: named
       become: true
-      changed_when: true
-      ignore_errors: true
 
     - name: Open firewall for DNS
       ansible.posix.firewalld:
@@ -168,43 +167,20 @@
         state: enabled
       become: true
 
-    - name: Forward port 53 to 8053 for DNS
-      ansible.posix.firewalld:
-        rich_rule: "rule family=\"ipv4\" forward-port port=\"53\" protocol=\"{{ item }}\" to-port=\"8053\""
-        permanent: true
-        immediate: true
-        state: enabled
-      become: true
-      loop:
-        - tcp
-        - udp
-
-    - name: Start BIND DNS container
-      ansible.builtin.command: >
-        podman run -d --name dns-server
-        --network=host
-        -v {{ dns_dir }}/named.conf:/etc/named.conf:Z
-        -v {{ dns_dir }}/{{ cluster.name }}.{{ cluster.base_domain }}.zone:/var/named/{{ cluster.name }}.{{ cluster.base_domain }}.zone:Z
-        registry.access.redhat.com/hi/bind:latest
+    - name: Start and enable named
+      ansible.builtin.systemd:
+        name: named
+        state: restarted
+        enabled: true
       become: true
 
     - name: Wait for DNS to start
       ansible.builtin.pause:
-        seconds: 5
-
-    - name: Show BIND container logs
-      ansible.builtin.command: podman logs dns-server
-      become: true
-      register: bind_logs
-      changed_when: false
-
-    - name: Display BIND logs
-      ansible.builtin.debug:
-        var: bind_logs.stderr_lines
+        seconds: 3
 
     - name: Verify DNS resolves api record
       ansible.builtin.command: >
-        dig +short -p 8053 api.{{ cluster.name }}.{{ cluster.base_domain }}
+        dig +short api.{{ cluster.name }}.{{ cluster.base_domain }}
         @127.0.0.1
       register: dns_check
       changed_when: false
