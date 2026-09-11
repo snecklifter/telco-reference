@@ -10,9 +10,9 @@ hosts:
   - hostname: {{ host.hostname }}
     role: {{ host.role }}
     interfaces:
-{%- for iface in host.interfaces %}
-      - name: "{{ iface.name }}"
-        macAddress: "{{ iface.mac }}"
+{%- for layout, mac in interface_layout | zip(host.macs) %}
+      - name: "{{ layout.name }}"
+        macAddress: "{{ mac }}"
 {%- endfor %}
     networkConfig:
       interfaces:
@@ -39,8 +39,8 @@ hosts:
           options:
             miimon: '{{ networking.bond_miimon }}'
           port:
-{%- for iface in host.interfaces | selectattr('bond', 'equalto', 'bond0') %}
-            - {{ iface.name }}
+{%- for layout in interface_layout | selectattr('bond', 'equalto', 'bond0') %}
+            - {{ layout.name }}
 {%- endfor %}
 {%- if networking.vlan_id is defined %}
       - name: bond0.{{ networking.vlan_id }}
@@ -58,7 +58,7 @@ hosts:
         ipv6:
           enabled: false
 {%- endif %}
-{%- if host.interfaces | selectattr('bond', 'equalto', 'bond1') | list | length > 0 %}
+{%- if interface_layout | selectattr('bond', 'equalto', 'bond1') | list | length > 0 %}
       - name: bond1
         description: "Bond 1"
         type: bond
@@ -73,12 +73,12 @@ hosts:
           options:
             miimon: '{{ networking.bond_miimon }}'
           port:
-{%- for iface in host.interfaces | selectattr('bond', 'equalto', 'bond1') %}
-            - {{ iface.name }}
+{%- for layout in interface_layout | selectattr('bond', 'equalto', 'bond1') %}
+            - {{ layout.name }}
 {%- endfor %}
 {%- endif %}
-{%- for iface in host.interfaces %}
-      - name: {{ iface.name }}
+{%- for layout in interface_layout %}
+      - name: {{ layout.name }}
         type: ethernet
         state: up
         mtu: {{ networking.mtu }}

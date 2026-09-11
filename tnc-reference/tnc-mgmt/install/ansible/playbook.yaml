@@ -19,11 +19,17 @@
           - hosts | selectattr('role', 'equalto', 'worker') | list | length >= 0
         fail_msg: "Exactly 3 master nodes are required"
 
-    - name: Validate each host has interfaces assigned to bond0
+    - name: Validate interface layout has bond0 interfaces
       ansible.builtin.assert:
         that:
-          - item.interfaces | selectattr('bond', 'equalto', 'bond0') | list | length >= 1
-        fail_msg: "Host {{ item.hostname }} must have at least one interface in bond0"
+          - interface_layout | selectattr('bond', 'equalto', 'bond0') | list | length >= 1
+        fail_msg: "interface_layout must have at least one interface in bond0"
+
+    - name: Validate each host has correct number of MACs
+      ansible.builtin.assert:
+        that:
+          - item.macs | length == interface_layout | length
+        fail_msg: "Host {{ item.hostname }} has {{ item.macs | length }} MACs but interface_layout has {{ interface_layout | length }} entries"
       loop: "{{ hosts }}"
       loop_control:
         label: "{{ item.hostname }}"
