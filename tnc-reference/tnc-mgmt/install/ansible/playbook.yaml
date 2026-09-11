@@ -192,10 +192,14 @@
       ansible.builtin.pause:
         seconds: 5
 
-    - name: Show container config for debugging
-      ansible.builtin.command: podman exec dns-server cat /etc/named.conf
+    - name: Copy container named.conf for debugging
+      ansible.builtin.command: podman cp dns-server:/etc/named.conf /tmp/container-named.conf
       become: true
+
+    - name: Read container named.conf
+      ansible.builtin.command: cat /tmp/container-named.conf
       register: container_named_conf
+      changed_when: false
 
     - name: Display container named.conf
       ansible.builtin.debug:
