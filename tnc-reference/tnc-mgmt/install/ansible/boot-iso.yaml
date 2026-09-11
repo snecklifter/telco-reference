@@ -1,0 +1,97 @@
+---
+- name: Boot nodes from agent ISO via Redfish virtual media
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yaml
+
+  tasks:
+    - name: Validate BMC configuration
+      ansible.builtin.assert:
+        that:
+          - bmc is defined
+          - bmc.username is defined
+          - bmc.password is defined
+          - bmc.iso_url is defined
+          - item.bmc_address is defined
+        fail_msg: "BMC configuration incomplete for {{ item.hostname }}"
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Power off nodes
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ bmc.username }}"
+        password: "{{ bmc.password }}"
+        category: Systems
+        command: PowerForceOff
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      ignore_errors: true
+
+    - name: Wait for nodes to power off
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Eject existing virtual media
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ bmc.username }}"
+        password: "{{ bmc.password }}"
+        category: Manager
+        command: VirtualMediaEject
+        virtual_media:
+          image_url: "{{ bmc.iso_url }}"
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      ignore_errors: true
+
+    - name: Insert agent ISO via virtual media
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ bmc.username }}"
+        password: "{{ bmc.password }}"
+        category: Manager
+        command: VirtualMediaInsert
+        virtual_media:
+          image_url: "{{ bmc.iso_url }}"
+          media_types:
+            - CD
+            - DVD
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Set one-time boot to virtual CD
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ bmc.username }}"
+        password: "{{ bmc.password }}"
+        category: Systems
+        command: SetOneTimeBoot
+        bootdevice: Cd
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Power on nodes
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ bmc.username }}"
+        password: "{{ bmc.password }}"
+        category: Systems
+        command: PowerOn
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Display status
+      ansible.builtin.debug:
+        msg:
+          - "All {{ hosts | length }} nodes booting from {{ bmc.iso_url }}"
+          - "Monitor with: openshift-install --dir ocp agent wait-for bootstrap-complete --log-level=info"
