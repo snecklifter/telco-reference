@@ -44,10 +44,10 @@
       ansible.builtin.assert:
         that:
           - bmc is defined
-          - bmc.username is defined
-          - bmc.password is defined
           - bmc.iso_url is defined
           - item.bmc_address is defined
+          - item.bmc_username is defined
+          - item.bmc_password is defined
         fail_msg: "BMC configuration incomplete for {{ item.hostname }}"
       loop: "{{ hosts }}"
       loop_control:
@@ -202,8 +202,8 @@
     - name: Power off nodes
       community.general.redfish_command:
         baseuri: "{{ item.bmc_address }}"
-        username: "{{ bmc.username }}"
-        password: "{{ bmc.password }}"
+        username: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
         category: Systems
         command: PowerForceOff
       loop: "{{ hosts }}"
@@ -218,8 +218,8 @@
     - name: Eject existing virtual media
       community.general.redfish_command:
         baseuri: "{{ item.bmc_address }}"
-        username: "{{ bmc.username }}"
-        password: "{{ bmc.password }}"
+        username: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
         category: Manager
         command: VirtualMediaEject
         virtual_media:
@@ -232,8 +232,8 @@
     - name: Insert agent ISO via virtual media
       community.general.redfish_command:
         baseuri: "{{ item.bmc_address }}"
-        username: "{{ bmc.username }}"
-        password: "{{ bmc.password }}"
+        username: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
         category: Manager
         command: VirtualMediaInsert
         virtual_media:
@@ -248,8 +248,8 @@
     - name: Set one-time boot to virtual CD
       community.general.redfish_command:
         baseuri: "{{ item.bmc_address }}"
-        username: "{{ bmc.username }}"
-        password: "{{ bmc.password }}"
+        username: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
         category: Systems
         command: SetOneTimeBoot
         bootdevice: Cd
@@ -260,8 +260,8 @@
     - name: Power on nodes
       community.general.redfish_command:
         baseuri: "{{ item.bmc_address }}"
-        username: "{{ bmc.username }}"
-        password: "{{ bmc.password }}"
+        username: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
         category: Systems
         command: PowerOn
       loop: "{{ hosts }}"
