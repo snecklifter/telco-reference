@@ -168,10 +168,21 @@
         state: enabled
       become: true
 
+    - name: Forward port 53 to 8053 for DNS
+      ansible.posix.firewalld:
+        rich_rule: "rule family=\"ipv4\" forward-port port=\"53\" protocol=\"{{ item }}\" to-port=\"8053\""
+        permanent: true
+        immediate: true
+        state: enabled
+      become: true
+      loop:
+        - tcp
+        - udp
+
     - name: Start BIND DNS container
       ansible.builtin.command: >
         podman run -d --name dns-server
-        -p 53:53/tcp -p 53:53/udp
+        --network=host
         -v {{ dns_dir }}/named.conf:/etc/named.conf:Z
         -v {{ dns_dir }}/{{ cluster.name }}.{{ cluster.base_domain }}.zone:/var/named/{{ cluster.name }}.{{ cluster.base_domain }}.zone:Z
         registry.access.redhat.com/hi/bind:latest
@@ -183,7 +194,7 @@
 
     - name: Verify DNS resolves api record
       ansible.builtin.command: >
-        dig +short api.{{ cluster.name }}.{{ cluster.base_domain }}
+        dig +short -p 8053 api.{{ cluster.name }}.{{ cluster.base_domain }}
         @127.0.0.1
       register: dns_check
       changed_when: false
