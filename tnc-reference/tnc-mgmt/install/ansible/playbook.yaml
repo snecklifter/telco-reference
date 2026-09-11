@@ -167,6 +167,18 @@
         state: enabled
       become: true
 
+    - name: Validate named.conf
+      ansible.builtin.command: named-checkconf /etc/named.conf
+      become: true
+      changed_when: false
+
+    - name: Validate zone file
+      ansible.builtin.command: >
+        named-checkzone {{ cluster.name }}.{{ cluster.base_domain }}
+        /var/named/{{ cluster.name }}.{{ cluster.base_domain }}.zone
+      become: true
+      changed_when: false
+
     - name: Start and enable named
       ansible.builtin.systemd:
         name: named

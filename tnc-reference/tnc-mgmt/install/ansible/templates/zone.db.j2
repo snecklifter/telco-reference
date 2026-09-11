@@ -13,6 +13,6 @@ api     IN  A   {{ networking.api_vip }}
 api-int IN  A   {{ networking.api_vip }}
 *.apps  IN  A   {{ networking.ingress_vip }}
 
-{%- for host in hosts %}
+{% for host in hosts %}
 {{ host.hostname }}    IN  A   {{ host.ip }}
-{%- endfor %}
+{% endfor %}
