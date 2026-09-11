@@ -95,16 +95,21 @@
       ansible.builtin.command: "{{ installer_binary }} version"
       changed_when: false
 
-    - name: Check community.general Ansible collection is installed
-      ansible.builtin.command: ansible-galaxy collection list community.general
+    - name: Check required Ansible collections
+      ansible.builtin.command: "ansible-galaxy collection list {{ item }}"
       changed_when: false
-      register: collection_check
-      failed_when: collection_check.rc != 0
+      register: collection_checks
       ignore_errors: true
+      loop:
+        - community.general
+        - ansible.posix
 
-    - name: Install community.general Ansible collection
-      ansible.builtin.command: ansible-galaxy collection install community.general
-      when: collection_check.rc != 0
+    - name: Install missing Ansible collections
+      ansible.builtin.command: "ansible-galaxy collection install {{ item.item }}"
+      when: item.rc != 0
+      loop: "{{ collection_checks.results }}"
+      loop_control:
+        label: "{{ item.item }}"
 
     # --- Prerequisites ---
 
@@ -119,6 +124,14 @@
         name: httpd
         state: started
         enabled: true
+      become: true
+
+    - name: Open firewall for HTTP
+      ansible.posix.firewalld:
+        service: http
+        permanent: true
+        immediate: true
+        state: enabled
       become: true
 
     # --- DNS Server ---
@@ -147,6 +160,14 @@
       changed_when: true
       ignore_errors: true
 
+    - name: Open firewall for DNS
+      ansible.posix.firewalld:
+        service: dns
+        permanent: true
+        immediate: true
+        state: enabled
+      become: true
+
     - name: Start BIND DNS container
       ansible.builtin.command: >
         podman run -d --name dns-server
@@ -163,7 +184,7 @@
     - name: Verify DNS resolves api record
       ansible.builtin.command: >
         dig +short api.{{ cluster.name }}.{{ cluster.base_domain }}
-        @{{ networking.dns_servers[0] }}
+        @127.0.0.1
       register: dns_check
       changed_when: false
       failed_when: networking.api_vip not in dns_check.stdout
