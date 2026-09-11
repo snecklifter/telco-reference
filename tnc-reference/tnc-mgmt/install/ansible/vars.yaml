@@ -43,6 +43,7 @@ bmc:
   username: admin
   password: REDACTED
   iso_url: http://bastion.example.com:8080/agent.x86_64.iso
+  iso_server_path: /var/www/html
 
 pull_secret: '{"auths":{"cloud.openshift.com":{"auth":"REDACTED","email":"user@redhat.com"}}}'
 

@@ -1,5 +1,5 @@
 ---
-- name: Generate OpenShift install manifests
+- name: Deploy OpenShift cluster via agent-based installer
   hosts: localhost
   connection: local
   gather_facts: false
@@ -8,10 +8,15 @@
     - vars.yaml
 
   vars:
-    output_dir: "{{ playbook_dir }}/../openshift"
+    build_dir: "{{ playbook_dir }}/../build"
+    extra_manifests_dir: "{{ playbook_dir }}/../openshift/openshift"
+    installer_binary: openshift-install
     raid_enabled: "{{ storage is defined and storage.os_disks is defined and storage.os_disks | length > 1 }}"
+    disconnected: "{{ mirror_registry is defined }}"
 
   tasks:
+    # --- Validation ---
+
     - name: Validate host count
       ansible.builtin.assert:
         that:
@@ -34,32 +39,81 @@
       loop_control:
         label: "{{ item.hostname }}"
 
+    - name: Validate BMC configuration
+      ansible.builtin.assert:
+        that:
+          - bmc is defined
+          - bmc.username is defined
+          - bmc.password is defined
+          - bmc.iso_url is defined
+          - item.bmc_address is defined
+        fail_msg: "BMC configuration incomplete for {{ item.hostname }}"
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Check openshift-install is available
+      ansible.builtin.command: "{{ installer_binary }} version"
+      changed_when: false
+
+    # --- Generate manifests ---
+
+    - name: Clean build directory
+      ansible.builtin.file:
+        path: "{{ build_dir }}"
+        state: absent
+
+    - name: Create build directory
+      ansible.builtin.file:
+        path: "{{ build_dir }}/openshift"
+        state: directory
+        mode: "0750"
+
     - name: Generate install-config.yaml
       ansible.builtin.template:
         src: templates/install-config.yaml.j2
-        dest: "{{ output_dir }}/install-config.yaml"
+        dest: "{{ build_dir }}/install-config.yaml"
         mode: "0640"
 
     - name: Generate agent-config.yaml
       ansible.builtin.template:
         src: templates/agent-config.yaml.j2
-        dest: "{{ output_dir }}/agent-config.yaml"
+        dest: "{{ build_dir }}/agent-config.yaml"
         mode: "0640"
 
     - name: Generate RAID mirror MachineConfig
       ansible.builtin.template:
         src: templates/raid-mirror.yaml.j2
-        dest: "{{ output_dir }}/98-{{ item }}-raid1-mirror.yaml"
+        dest: "{{ build_dir }}/openshift/98-{{ item }}-raid1-mirror.yaml"
         mode: "0640"
       vars:
         role: "{{ item }}"
-      loop: "{{ roles_in_use }}"
+      loop: "{{ hosts | map(attribute='role') | unique | list }}"
       when: raid_enabled | bool
-      vars:
-        roles_in_use: >-
-          {{ hosts | map(attribute='role') | unique | list }}
 
-    - name: Display summary
+    - name: Copy disconnected install manifests
+      ansible.builtin.copy:
+        src: "{{ extra_manifests_dir }}/"
+        dest: "{{ build_dir }}/openshift/"
+        mode: "0640"
+      when: disconnected | bool
+
+    # --- Generate ISO ---
+
+    - name: Generate agent ISO
+      ansible.builtin.command: "{{ installer_binary }} --dir {{ build_dir }} agent create image"
+
+    - name: Copy ISO to HTTP server
+      ansible.builtin.copy:
+        src: "{{ build_dir }}/agent.x86_64.iso"
+        dest: "{{ bmc.iso_server_path }}/agent.x86_64.iso"
+        remote_src: true
+        mode: "0644"
+      when: bmc.iso_server_path is defined
+
+    # --- Boot nodes via Redfish ---
+
+    - name: Display deployment summary
       ansible.builtin.debug:
         msg:
           - "Cluster: {{ cluster.name }}.{{ cluster.base_domain }}"
@@ -68,4 +122,95 @@
           - "API VIP: {{ networking.api_vip }}"
           - "Ingress VIP: {{ networking.ingress_vip }}"
           - "RAID: {{ 'enabled (' + storage.os_disks | join(' + ') + ')' if raid_enabled | bool else 'disabled' }}"
-          - "Output: {{ output_dir }}"
+          - "ISO: {{ bmc.iso_url }}"
+          - "Booting {{ hosts | length }} nodes..."
+
+    - name: Power off nodes
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ bmc.username }}"
+        password: "{{ bmc.password }}"
+        category: Systems
+        command: PowerForceOff
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      ignore_errors: true
+
+    - name: Wait for nodes to power off
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Eject existing virtual media
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ bmc.username }}"
+        password: "{{ bmc.password }}"
+        category: Manager
+        command: VirtualMediaEject
+        virtual_media:
+          image_url: "{{ bmc.iso_url }}"
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      ignore_errors: true
+
+    - name: Insert agent ISO via virtual media
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ bmc.username }}"
+        password: "{{ bmc.password }}"
+        category: Manager
+        command: VirtualMediaInsert
+        virtual_media:
+          image_url: "{{ bmc.iso_url }}"
+          media_types:
+            - CD
+            - DVD
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Set one-time boot to virtual CD
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ bmc.username }}"
+        password: "{{ bmc.password }}"
+        category: Systems
+        command: SetOneTimeBoot
+        bootdevice: Cd
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Power on nodes
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ bmc.username }}"
+        password: "{{ bmc.password }}"
+        category: Systems
+        command: PowerOn
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    # --- Wait for installation ---
+
+    - name: Wait for bootstrap to complete
+      ansible.builtin.command: >
+        {{ installer_binary }} --dir {{ build_dir }}
+        agent wait-for bootstrap-complete --log-level=info
+      timeout: 3600
+
+    - name: Wait for install to complete
+      ansible.builtin.command: >
+        {{ installer_binary }} --dir {{ build_dir }}
+        agent wait-for install-complete
+      timeout: 3600
+
+    - name: Installation complete
+      ansible.builtin.debug:
+        msg:
+          - "Cluster {{ cluster.name }}.{{ cluster.base_domain }} deployed successfully"
+          - "Kubeconfig: {{ build_dir }}/auth/kubeconfig"
+          - "Run: export KUBECONFIG={{ build_dir }}/auth/kubeconfig"
