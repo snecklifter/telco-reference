@@ -192,6 +192,15 @@
       ansible.builtin.pause:
         seconds: 5
 
+    - name: Show container config for debugging
+      ansible.builtin.command: podman exec dns-server cat /etc/named.conf
+      become: true
+      register: container_named_conf
+
+    - name: Display container named.conf
+      ansible.builtin.debug:
+        var: container_named_conf.stdout_lines
+
     - name: Verify DNS resolves api record
       ansible.builtin.command: >
         dig +short -p 8053 api.{{ cluster.name }}.{{ cluster.base_domain }}
