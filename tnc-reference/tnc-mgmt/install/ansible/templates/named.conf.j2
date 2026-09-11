@@ -1,0 +1,19 @@
+options {
+    listen-on port 53 { any; };
+    listen-on-v6 port 53 { none; };
+    directory "/var/named";
+    allow-query { any; };
+    recursion yes;
+    dnssec-validation no;
+    forwarders {
+{%- for fwd in networking.dns_forwarders | default(['8.8.8.8', '8.8.4.4']) %}
+        {{ fwd }};
+{%- endfor %}
+    };
+    forward only;
+};
+
+zone "{{ cluster.name }}.{{ cluster.base_domain }}" IN {
+    type master;
+    file "{{ cluster.name }}.{{ cluster.base_domain }}.zone";
+};

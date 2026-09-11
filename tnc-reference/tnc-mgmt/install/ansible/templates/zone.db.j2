@@ -1,0 +1,18 @@
+$TTL 86400
+@   IN  SOA ns1.{{ cluster.name }}.{{ cluster.base_domain }}. admin.{{ cluster.name }}.{{ cluster.base_domain }}. (
+            2025010101  ; serial
+            3600        ; refresh
+            1800        ; retry
+            604800      ; expire
+            86400       ; minimum TTL
+        )
+@       IN  NS  ns1
+ns1     IN  A   {{ networking.dns_servers[0] }}
+
+api     IN  A   {{ networking.api_vip }}
+api-int IN  A   {{ networking.api_vip }}
+*.apps  IN  A   {{ networking.ingress_vip }}
+
+{%- for host in hosts %}
+{{ host.hostname }}    IN  A   {{ host.ip }}
+{%- endfor %}

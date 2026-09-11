@@ -9,6 +9,7 @@
 
   vars:
     build_dir: "{{ playbook_dir }}/../build"
+    dns_dir: "{{ playbook_dir }}/../dns"
     extra_manifests_dir: "{{ playbook_dir }}/../openshift/openshift"
     installer_binary: openshift-install
     raid_enabled: "{{ storage is defined and storage.os_disks is defined and storage.os_disks | length > 1 }}"
@@ -81,6 +82,53 @@
         state: started
         enabled: true
       become: true
+
+    # --- DNS Server ---
+
+    - name: Create DNS config directory
+      ansible.builtin.file:
+        path: "{{ dns_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Generate named.conf
+      ansible.builtin.template:
+        src: templates/named.conf.j2
+        dest: "{{ dns_dir }}/named.conf"
+        mode: "0644"
+
+    - name: Generate zone file
+      ansible.builtin.template:
+        src: templates/zone.db.j2
+        dest: "{{ dns_dir }}/{{ cluster.name }}.{{ cluster.base_domain }}.zone"
+        mode: "0644"
+
+    - name: Remove existing DNS container
+      ansible.builtin.command: podman rm -f dns-server
+      become: true
+      changed_when: true
+      ignore_errors: true
+
+    - name: Start BIND DNS container
+      ansible.builtin.command: >
+        podman run -d --name dns-server
+        -p 53:53/tcp -p 53:53/udp
+        -v {{ dns_dir }}/named.conf:/etc/named.conf:Z
+        -v {{ dns_dir }}/{{ cluster.name }}.{{ cluster.base_domain }}.zone:/var/named/{{ cluster.name }}.{{ cluster.base_domain }}.zone:Z
+        registry.access.redhat.com/hi/bind:latest
+      become: true
+
+    - name: Wait for DNS to start
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: Verify DNS resolves api record
+      ansible.builtin.command: >
+        dig +short api.{{ cluster.name }}.{{ cluster.base_domain }}
+        @{{ networking.dns_servers[0] }}
+      register: dns_check
+      changed_when: false
+      failed_when: networking.api_vip not in dns_check.stdout
 
     # --- Generate manifests ---
 
