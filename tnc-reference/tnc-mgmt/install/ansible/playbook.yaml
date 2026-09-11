@@ -56,6 +56,32 @@
       ansible.builtin.command: "{{ installer_binary }} version"
       changed_when: false
 
+    - name: Check community.general Ansible collection is installed
+      ansible.builtin.command: ansible-galaxy collection list community.general
+      changed_when: false
+      register: collection_check
+      failed_when: collection_check.rc != 0
+      ignore_errors: true
+
+    - name: Install community.general Ansible collection
+      ansible.builtin.command: ansible-galaxy collection install community.general
+      when: collection_check.rc != 0
+
+    # --- Prerequisites ---
+
+    - name: Install httpd
+      ansible.builtin.dnf:
+        name: httpd
+        state: present
+      become: true
+
+    - name: Start and enable httpd
+      ansible.builtin.systemd:
+        name: httpd
+        state: started
+        enabled: true
+      become: true
+
     # --- Generate manifests ---
 
     - name: Clean build directory
