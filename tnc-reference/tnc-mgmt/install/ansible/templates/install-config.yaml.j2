@@ -29,7 +29,7 @@ platform:
     - {{ networking.api_vip }}
     ingressVIPs:
     - {{ networking.ingress_vip }}
-{%- if mirror_registry is defined %}
+{% if mirror_registry is defined %}
 imageDigestSources:
   - mirrors:
     - {{ mirror_registry.url }}/{{ mirror_registry.release_path }}
@@ -39,7 +39,7 @@ imageDigestSources:
     source: quay.io/openshift-release-dev/ocp-release
 additionalTrustBundle: |
 {{ mirror_registry.ca_bundle | indent(2, first=true) }}
-{%- endif %}
+{% endif %}
 pullSecret: '{{ pull_secret }}'
 sshKey: |
 {{ ssh_key | indent(2, first=true) }}
