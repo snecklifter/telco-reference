@@ -1,6 +1,17 @@
 options {
+    directory "/var/named";
+    pid-file none;
+    session-keyfile none;
+
+    listen-on port 8053 { any; };
+    listen-on-v6 port 8053 { none; };
+
     recursion yes;
+    allow-recursion { any; };
     dnssec-validation no;
+    minimal-any yes;
+    max-cache-size 128m;
+
     forwarders {
 {%- for fwd in networking.dns_forwarders | default(['8.8.8.8', '8.8.4.4']) %}
         {{ fwd }};
@@ -8,6 +19,8 @@ options {
     };
     forward only;
 };
+
+controls { };
 
 zone "{{ cluster.name }}.{{ cluster.base_domain }}" IN {
     type primary;

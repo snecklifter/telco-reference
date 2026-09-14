@@ -142,10 +142,10 @@
         state: directory
         mode: "0755"
 
-    - name: Generate local.conf
+    - name: Generate named.conf
       ansible.builtin.template:
         src: templates/named.conf.j2
-        dest: "{{ dns_dir }}/local.conf"
+        dest: "{{ dns_dir }}/named.conf"
         mode: "0644"
 
     - name: Generate zone file
@@ -178,7 +178,7 @@
       ansible.builtin.command: >
         podman run -d --name dns-server
         --publish 53:8053/udp --publish 53:8053/tcp
-        -v {{ dns_dir }}/local.conf:/etc/named/conf.d/local.conf:ro,Z
+        -v {{ dns_dir }}/named.conf:/etc/named/hbird-defaults.conf:ro,Z
         -v {{ dns_dir }}/{{ cluster.name }}.{{ cluster.base_domain }}.zone:/var/named/{{ cluster.name }}.{{ cluster.base_domain }}.zone:ro,Z
         registry.access.redhat.com/hi/bind:latest
       become: true
