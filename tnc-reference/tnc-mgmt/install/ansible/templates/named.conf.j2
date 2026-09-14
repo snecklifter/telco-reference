@@ -1,8 +1,4 @@
 options {
-    listen-on port 8053 { any; };
-    listen-on-v6 port 8053 { none; };
-    directory "/var/named";
-    allow-query { any; };
     recursion yes;
     dnssec-validation no;
     forwarders {
@@ -14,6 +10,6 @@ options {
 };
 
 zone "{{ cluster.name }}.{{ cluster.base_domain }}" IN {
-    type master;
-    file "{{ cluster.name }}.{{ cluster.base_domain }}.zone";
+    type primary;
+    file "/var/named/{{ cluster.name }}.{{ cluster.base_domain }}.zone";
 };
