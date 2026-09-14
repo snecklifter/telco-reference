@@ -113,9 +113,11 @@
 
     # --- Prerequisites ---
 
-    - name: Install httpd
+    - name: Install prerequisites
       ansible.builtin.dnf:
-        name: httpd
+        name:
+          - httpd
+          - nmstate
         state: present
       become: true
 
