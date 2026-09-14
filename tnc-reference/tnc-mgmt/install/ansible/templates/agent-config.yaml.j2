@@ -6,14 +6,14 @@ metadata:
 rendezvousIP: {{ (hosts | selectattr('role', 'equalto', 'master') | first).ip }}
 
 hosts:
-{%- for host in hosts %}
+{% for host in hosts %}
   - hostname: {{ host.hostname }}
     role: {{ host.role }}
     interfaces:
-{%- for layout, mac in interface_layout | zip(host.macs) %}
+{% for layout, mac in interface_layout | zip(host.macs) %}
       - name: "{{ layout.name }}"
         macAddress: "{{ mac }}"
-{%- endfor %}
+{% endfor %}
     networkConfig:
       interfaces:
       - name: bond0
@@ -21,17 +21,17 @@ hosts:
         type: bond
         state: up
         mtu: {{ networking.mtu }}
-{%- if networking.vlan_id is not defined %}
+{% if networking.vlan_id is not defined %}
         ipv4:
           address:
           - ip: {{ host.ip }}
             prefix-length: {{ networking.prefix_length }}
           enabled: true
-{%- else %}
+{% else %}
         ipv4:
           enabled: true
           dhcp: false
-{%- endif %}
+{% endif %}
         ipv6:
           enabled: false
         link-aggregation:
@@ -39,10 +39,10 @@ hosts:
           options:
             miimon: '{{ networking.bond_miimon }}'
           port:
-{%- for layout in interface_layout | selectattr('bond', 'equalto', 'bond0') %}
+{% for layout in interface_layout | selectattr('bond', 'equalto', 'bond0') %}
             - {{ layout.name }}
-{%- endfor %}
-{%- if networking.vlan_id is defined %}
+{% endfor %}
+{% if networking.vlan_id is defined %}
       - name: bond0.{{ networking.vlan_id }}
         type: vlan
         state: up
@@ -57,8 +57,8 @@ hosts:
           enabled: true
         ipv6:
           enabled: false
-{%- endif %}
-{%- if interface_layout | selectattr('bond', 'equalto', 'bond1') | list | length > 0 %}
+{% endif %}
+{% if interface_layout | selectattr('bond', 'equalto', 'bond1') | list | length > 0 %}
       - name: bond1
         description: "Bond 1"
         type: bond
@@ -73,10 +73,10 @@ hosts:
           options:
             miimon: '{{ networking.bond_miimon }}'
           port:
-{%- for layout in interface_layout | selectattr('bond', 'equalto', 'bond1') %}
+{% for layout in interface_layout | selectattr('bond', 'equalto', 'bond1') %}
             - {{ layout.name }}
-{%- endfor %}
-{%- if networking.storage_network is defined and host.storage_ip is defined %}
+{% endfor %}
+{% if networking.storage_network is defined and host.storage_ip is defined %}
       - name: bond1.{{ networking.storage_network.vlan_id }}
         type: vlan
         state: up
@@ -91,9 +91,9 @@ hosts:
           enabled: true
         ipv6:
           enabled: false
-{%- endif %}
-{%- endif %}
-{%- for layout in interface_layout %}
+{% endif %}
+{% endif %}
+{% for layout in interface_layout %}
       - name: {{ layout.name }}
         type: ethernet
         state: up
@@ -102,26 +102,26 @@ hosts:
           enabled: false
         ipv6:
           enabled: false
-{%- endfor %}
+{% endfor %}
       dns-resolver:
         config:
           server:
-{%- for dns in networking.dns_servers %}
+{% for dns in networking.dns_servers %}
             - {{ dns }}
-{%- endfor %}
+{% endfor %}
       routes:
         config:
           - destination: 0.0.0.0/0
             next-hop-address: {{ networking.default_gateway }}
-{%- if networking.vlan_id is defined %}
+{% if networking.vlan_id is defined %}
             next-hop-interface: bond0.{{ networking.vlan_id }}
-{%- else %}
+{% else %}
             next-hop-interface: bond0
-{%- endif %}
+{% endif %}
     rootDeviceHints:
-{%- if storage is defined and storage.os_disks is defined %}
+{% if storage is defined and storage.os_disks is defined %}
       deviceName: "{{ storage.os_disks[0] }}"
-{%- else %}
+{% else %}
       deviceName: "{{ host.root_device }}"
-{%- endif %}
-{%- endfor %}
+{% endif %}
+{% endfor %}
