@@ -250,6 +250,7 @@
         dest: "{{ bmc.iso_server_path }}/agent.x86_64.iso"
         remote_src: true
         mode: "0644"
+      become: true
       when: bmc.iso_server_path is defined
 
     # --- Boot nodes via Redfish ---
