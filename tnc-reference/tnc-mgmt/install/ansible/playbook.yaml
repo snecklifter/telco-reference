@@ -320,7 +320,8 @@
         password: "{{ item.bmc_password }}"
         category: Systems
         command: SetOneTimeBoot
-        bootdevice: Cd
+        bootdevice: UefiCd
+        boot_override_mode: UEFI
       loop: "{{ hosts }}"
       loop_control:
         label: "{{ item.hostname }}"
