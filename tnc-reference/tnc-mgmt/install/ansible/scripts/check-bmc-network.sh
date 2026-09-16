@@ -28,11 +28,17 @@ vlan = d.get('VLAN',{})
 print(f\"  Status:   {d.get('Status',{}).get('State','unknown')}\")
 for a in addrs:
     print(f\"  IPv4:     {a.get('Address','')}/{a.get('SubnetMask','')} (origin: {a.get('AddressOrigin','')})\")
+    addr_gw = a.get('Gateway','')
+    if addr_gw:
+        print(f\"  Gateway:  {addr_gw} (from IPv4Addresses)\")
 if gw:
-    print(f\"  Gateway:  {gw}\")
+    print(f\"  Gateway:  {gw} (from IPv4DefaultGateway)\")
+static_routes = d.get('IPv4StaticRoutes',[])
+if static_routes:
+    for r in static_routes:
+        print(f\"  Route:    {r}\")
 if vlan:
     print(f\"  VLAN:     Enabled={vlan.get('VLANEnable',False)} Id={vlan.get('VLANId','')}\")
-routes = d.get('IPv4StaticRoutes',[]) or d.get('StaticNameServers',[])
 nameservers = d.get('NameServers',[])
 if nameservers:
     print(f\"  DNS:      {nameservers}\")
