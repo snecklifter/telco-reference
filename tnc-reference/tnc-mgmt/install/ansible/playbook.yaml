@@ -313,7 +313,7 @@
       loop_control:
         label: "{{ item.hostname }}"
 
-    - name: Set one-time boot to virtual CD
+    - name: Set boot override to virtual CD
       ansible.builtin.uri:
         url: "https://{{ item.bmc_address }}/redfish/v1/Systems/1"
         method: PATCH
@@ -327,7 +327,7 @@
         body:
           Boot:
             BootSourceOverrideTarget: UsbCd
-            BootSourceOverrideEnabled: Once
+            BootSourceOverrideEnabled: Continuous
             BootSourceOverrideMode: UEFI
       loop: "{{ hosts }}"
       loop_control:
@@ -351,6 +351,39 @@
         {{ installer_binary }} --dir {{ build_dir }}
         agent wait-for bootstrap-complete --log-level=info
       timeout: 3600
+
+    - name: Clear boot override
+      ansible.builtin.uri:
+        url: "https://{{ item.bmc_address }}/redfish/v1/Systems/1"
+        method: PATCH
+        user: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          Boot:
+            BootSourceOverrideTarget: None
+            BootSourceOverrideEnabled: Disabled
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Eject virtual media
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
+        category: Manager
+        command: VirtualMediaEject
+        virtual_media:
+          image_url: "{{ bmc.iso_url }}"
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      ignore_errors: true
 
     - name: Wait for install to complete
       ansible.builtin.command: >
