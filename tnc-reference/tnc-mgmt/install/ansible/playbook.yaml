@@ -314,14 +314,21 @@
         label: "{{ item.hostname }}"
 
     - name: Set one-time boot to virtual CD
-      community.general.redfish_command:
-        baseuri: "{{ item.bmc_address }}"
-        username: "{{ item.bmc_username }}"
+      ansible.builtin.uri:
+        url: "https://{{ item.bmc_address }}/redfish/v1/Systems/1"
+        method: PATCH
+        user: "{{ item.bmc_username }}"
         password: "{{ item.bmc_password }}"
-        category: Systems
-        command: SetOneTimeBoot
-        bootdevice: Cd
-        boot_override_mode: UEFI
+        force_basic_auth: true
+        validate_certs: false
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          Boot:
+            BootSourceOverrideTarget: UsbCd
+            BootSourceOverrideEnabled: Once
+            BootSourceOverrideMode: UEFI
       loop: "{{ hosts }}"
       loop_control:
         label: "{{ item.hostname }}"
