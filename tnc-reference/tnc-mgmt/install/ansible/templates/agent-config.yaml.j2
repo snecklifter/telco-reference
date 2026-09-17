@@ -25,7 +25,7 @@ hosts:
         ipv4:
           address:
           - ip: {{ host.ip }}
-            prefix-length: {{ networking.prefix_length }}
+            prefix-length: {{ networking.machine_network_cidr.split('/')[1] }}
           enabled: true
 {% else %}
         ipv4:
@@ -53,7 +53,7 @@ hosts:
         ipv4:
           address:
           - ip: {{ host.ip }}
-            prefix-length: {{ networking.prefix_length }}
+            prefix-length: {{ networking.machine_network_cidr.split('/')[1] }}
           enabled: true
         ipv6:
           enabled: false
@@ -87,7 +87,7 @@ hosts:
         ipv4:
           address:
           - ip: {{ host.storage_ip }}
-            prefix-length: {{ networking.storage_network.prefix_length }}
+            prefix-length: {{ networking.storage_network.cidr.split('/')[1] }}
           enabled: true
         ipv6:
           enabled: false

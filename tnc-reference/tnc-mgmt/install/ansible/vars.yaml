@@ -13,7 +13,6 @@ networking:
   ingress_vip: 172.31.61.5
 
   mtu: 8950
-  prefix_length: 24
   bond_mode: "802.3ad"
   bond_miimon: "1000"
 
@@ -22,7 +21,7 @@ networking:
 
   storage_network:
     vlan_id: 62
-    prefix_length: 24
+    cidr: 172.31.62.0/24
 
   dns_servers:
     - 192.0.2.4
