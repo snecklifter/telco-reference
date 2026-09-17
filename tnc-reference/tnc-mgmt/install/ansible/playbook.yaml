@@ -256,17 +256,28 @@
     - name: Embed core user password into ISO
       when: debug_password is defined
       block:
-        - name: Generate password Ignition config
+        - name: Extract existing Ignition config from ISO
+          ansible.builtin.command: >
+            coreos-installer iso ignition show
+            {{ build_dir }}/agent.x86_64.iso
+          register: existing_ignition
+
+        - name: Merge password into existing Ignition config
           ansible.builtin.copy:
-            content: '{"ignition":{"version":"3.2.0"},"passwd":{"users":[{"name":"core","passwordHash":"{{ debug_password_hash }}"}]}}'
-            dest: "{{ build_dir }}/core-pass.ign"
+            content: "{{ existing_ignition.stdout | from_json | combine({'passwd': {'users': [{'name': 'core', 'passwordHash': debug_password_hash}]}}, recursive=true) | to_nice_json }}"
+            dest: "{{ build_dir }}/merged.ign"
             mode: "0600"
 
-        - name: Embed Ignition config into ISO
+        - name: Remove existing Ignition config from ISO
           ansible.builtin.command: >
-            coreos-installer iso ignition embed -f
+            coreos-installer iso ignition remove
             {{ build_dir }}/agent.x86_64.iso
-            -i {{ build_dir }}/core-pass.ign
+
+        - name: Embed merged Ignition config into ISO
+          ansible.builtin.command: >
+            coreos-installer iso ignition embed
+            {{ build_dir }}/agent.x86_64.iso
+            -i {{ build_dir }}/merged.ign
 
     - name: Copy ISO to HTTP server
       ansible.builtin.copy:
