@@ -119,6 +119,7 @@
         name:
           - httpd
           - nmstate
+          - coreos-installer
         state: present
       become: true
 
@@ -233,16 +234,6 @@
       loop: "{{ hosts | map(attribute='role') | unique | list }}"
       when: raid_enabled | bool
 
-    - name: Generate core user password MachineConfig
-      ansible.builtin.template:
-        src: templates/core-password.yaml.j2
-        dest: "{{ build_dir }}/openshift/99-{{ item }}-core-password.yaml"
-        mode: "0640"
-      vars:
-        role: "{{ item }}"
-      loop: "{{ hosts | map(attribute='role') | unique | list }}"
-      when: debug_password is defined
-
     - name: Copy disconnected install manifests
       ansible.builtin.copy:
         src: "{{ extra_manifests_dir }}/"
@@ -254,6 +245,21 @@
 
     - name: Generate agent ISO
       ansible.builtin.command: "{{ installer_binary }} --dir {{ build_dir }} agent create image"
+
+    - name: Embed core user password into ISO
+      when: debug_password is defined
+      block:
+        - name: Generate password Ignition config
+          ansible.builtin.copy:
+            content: '{"ignition":{"version":"3.2.0"},"passwd":{"users":[{"name":"core","passwordHash":"{{ debug_password_hash }}"}]}}'
+            dest: "{{ build_dir }}/core-pass.ign"
+            mode: "0600"
+
+        - name: Embed Ignition config into ISO
+          ansible.builtin.command: >
+            coreos-installer iso ignition embed -f
+            {{ build_dir }}/agent.x86_64.iso
+            -i {{ build_dir }}/core-pass.ign
 
     - name: Copy ISO to HTTP server
       ansible.builtin.copy:
