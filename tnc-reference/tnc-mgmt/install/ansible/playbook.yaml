@@ -14,6 +14,7 @@
     installer_binary: openshift-install
     raid_enabled: "{{ storage is defined and storage.os_disks is defined and storage.os_disks | length > 1 }}"
     disconnected: "{{ mirror_registry is defined }}"
+    debug_password_hash: "{{ debug_password | password_hash('sha512') if debug_password is defined else '' }}"
 
   tasks:
     # --- Validation ---
@@ -232,6 +233,16 @@
       loop: "{{ hosts | map(attribute='role') | unique | list }}"
       when: raid_enabled | bool
 
+    - name: Generate core user password MachineConfig
+      ansible.builtin.template:
+        src: templates/core-password.yaml.j2
+        dest: "{{ build_dir }}/openshift/99-{{ item }}-core-password.yaml"
+        mode: "0640"
+      vars:
+        role: "{{ item }}"
+      loop: "{{ hosts | map(attribute='role') | unique | list }}"
+      when: debug_password is defined
+
     - name: Copy disconnected install manifests
       ansible.builtin.copy:
         src: "{{ extra_manifests_dir }}/"
@@ -313,12 +324,33 @@
       loop_control:
         label: "{{ item.hostname }}"
 
-    - name: Set boot override to virtual CD
+    - name: Get current boot order
       ansible.builtin.uri:
         url: "https://{{ item.bmc_address }}/redfish/v1/Systems/1"
-        method: PATCH
+        method: GET
         user: "{{ item.bmc_username }}"
         password: "{{ item.bmc_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        return_content: true
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      register: system_info
+
+    - name: Display current boot order
+      ansible.builtin.debug:
+        msg: "{{ item.json.Boot.BootOrder | default('No BootOrder found') }}"
+      loop: "{{ system_info.results }}"
+      loop_control:
+        label: "{{ item.item.hostname }}"
+
+    - name: Set UsbCd first in boot order
+      ansible.builtin.uri:
+        url: "https://{{ item.item.bmc_address }}/redfish/v1/Systems/1"
+        method: PATCH
+        user: "{{ item.item.bmc_username }}"
+        password: "{{ item.item.bmc_password }}"
         force_basic_auth: true
         validate_certs: false
         headers:
@@ -326,12 +358,11 @@
         body_format: json
         body:
           Boot:
-            BootSourceOverrideTarget: UsbCd
-            BootSourceOverrideEnabled: Continuous
             BootSourceOverrideMode: UEFI
-      loop: "{{ hosts }}"
+            BootOrder: "{{ ['UsbCd'] + (item.json.Boot.BootOrder | default([]) | reject('equalto', 'UsbCd') | list) }}"
+      loop: "{{ system_info.results }}"
       loop_control:
-        label: "{{ item.hostname }}"
+        label: "{{ item.item.hostname }}"
 
     - name: Power on nodes
       community.general.redfish_command:

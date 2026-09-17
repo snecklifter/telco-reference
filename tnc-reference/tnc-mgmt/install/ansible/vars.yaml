@@ -43,6 +43,9 @@ storage:
 #     REDACTED
 #     -----END CERTIFICATE-----
 
+# Uncomment to set a console login password for the core user (for debugging)
+# debug_password: temppass123
+
 bmc:
   iso_url: http://bastion.example.com:8080/agent.x86_64.iso
   iso_server_path: /var/www/html
