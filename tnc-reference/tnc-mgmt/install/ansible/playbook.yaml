@@ -224,6 +224,13 @@
         dest: "{{ build_dir }}/agent-config.yaml"
         mode: "0640"
 
+    - name: Generate cluster network MTU manifest
+      ansible.builtin.template:
+        src: templates/cluster-network-mtu.yaml.j2
+        dest: "{{ build_dir }}/openshift/cluster-network-mtu.yaml"
+        mode: "0640"
+      when: networking.mtu | default(1500) | int > 1500
+
     - name: Generate RAID mirror MachineConfig
       ansible.builtin.template:
         src: templates/raid-mirror.yaml.j2
