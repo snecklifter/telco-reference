@@ -325,33 +325,12 @@
       loop_control:
         label: "{{ item.hostname }}"
 
-    - name: Get current boot order
+    - name: Set boot override to virtual CD
       ansible.builtin.uri:
         url: "https://{{ item.bmc_address }}/redfish/v1/Systems/1"
-        method: GET
+        method: PATCH
         user: "{{ item.bmc_username }}"
         password: "{{ item.bmc_password }}"
-        force_basic_auth: true
-        validate_certs: false
-        return_content: true
-      loop: "{{ hosts }}"
-      loop_control:
-        label: "{{ item.hostname }}"
-      register: system_info
-
-    - name: Display current boot order
-      ansible.builtin.debug:
-        msg: "{{ item.json.Boot.BootOrder | default('No BootOrder found') }}"
-      loop: "{{ system_info.results }}"
-      loop_control:
-        label: "{{ item.item.hostname }}"
-
-    - name: Set UsbCd first in boot order
-      ansible.builtin.uri:
-        url: "https://{{ item.item.bmc_address }}/redfish/v1/Systems/1"
-        method: PATCH
-        user: "{{ item.item.bmc_username }}"
-        password: "{{ item.item.bmc_password }}"
         force_basic_auth: true
         validate_certs: false
         headers:
@@ -359,11 +338,12 @@
         body_format: json
         body:
           Boot:
+            BootSourceOverrideTarget: UsbCd
+            BootSourceOverrideEnabled: Continuous
             BootSourceOverrideMode: UEFI
-            BootOrder: "{{ ['UsbCd'] + (item.json.Boot.BootOrder | default([]) | reject('equalto', 'UsbCd') | list) }}"
-      loop: "{{ system_info.results }}"
+      loop: "{{ hosts }}"
       loop_control:
-        label: "{{ item.item.hostname }}"
+        label: "{{ item.hostname }}"
 
     - name: Power on nodes
       community.general.redfish_command:
