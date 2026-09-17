@@ -119,7 +119,6 @@
         name:
           - httpd
           - nmstate
-          - python3-passlib
         state: present
       become: true
 
