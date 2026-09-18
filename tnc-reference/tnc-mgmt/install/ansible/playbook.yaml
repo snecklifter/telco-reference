@@ -121,6 +121,7 @@
           - nmstate
           - coreos-installer
         state: present
+        use_backend: dnf4
       become: true
 
     - name: Start and enable httpd
