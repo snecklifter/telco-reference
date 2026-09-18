@@ -53,14 +53,24 @@ ssh_key: |
   ssh-rsa AAAAB3NzaC1yc2EA...
 
 interface_layout:
-  - name: eno12399
-    bond: bond0
-  - name: eno12409
-    bond: bond0
-  - name: eno12419
-    bond: bond1
-  - name: eno12429
-    bond: bond1
+  master:
+    - name: eno12399
+      bond: bond0
+    - name: eno12409
+      bond: bond0
+    - name: eno12419
+      bond: bond1
+    - name: eno12429
+      bond: bond1
+  worker:
+    - name: ens1f0np0
+      bond: bond0
+    - name: ens1f1np1
+      bond: bond0
+    - name: ens2f0np0
+      bond: bond1
+    - name: ens2f1np1
+      bond: bond1
 
 hosts:
   - hostname: control-0

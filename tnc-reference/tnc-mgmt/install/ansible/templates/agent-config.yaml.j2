@@ -10,7 +10,8 @@ hosts:
   - hostname: {{ host.hostname }}
     role: {{ host.role }}
     interfaces:
-{% for layout, mac in interface_layout | zip(host.macs) %}
+{% set host_layout = interface_layout[host.role] %}
+{% for layout, mac in host_layout | zip(host.macs) %}
       - name: "{{ layout.name }}"
         macAddress: "{{ mac }}"
 {% endfor %}
@@ -39,7 +40,7 @@ hosts:
           options:
             miimon: '{{ networking.bond_miimon }}'
           port:
-{% for layout in interface_layout | selectattr('bond', 'equalto', 'bond0') %}
+{% for layout in host_layout | selectattr('bond', 'equalto', 'bond0') %}
             - {{ layout.name }}
 {% endfor %}
 {% if networking.vlan_id is defined %}
@@ -58,7 +59,7 @@ hosts:
         ipv6:
           enabled: false
 {% endif %}
-{% if interface_layout | selectattr('bond', 'equalto', 'bond1') | list | length > 0 %}
+{% if host_layout | selectattr('bond', 'equalto', 'bond1') | list | length > 0 %}
       - name: bond1
         description: "Bond 1"
         type: bond
@@ -73,7 +74,7 @@ hosts:
           options:
             miimon: '{{ networking.bond_miimon }}'
           port:
-{% for layout in interface_layout | selectattr('bond', 'equalto', 'bond1') %}
+{% for layout in host_layout | selectattr('bond', 'equalto', 'bond1') %}
             - {{ layout.name }}
 {% endfor %}
 {% if networking.storage_network is defined and host.storage_ip is defined %}
@@ -93,7 +94,7 @@ hosts:
           enabled: false
 {% endif %}
 {% endif %}
-{% for layout in interface_layout %}
+{% for layout in host_layout %}
       - name: {{ layout.name }}
         type: ethernet
         state: up

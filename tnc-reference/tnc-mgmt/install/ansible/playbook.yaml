@@ -28,14 +28,15 @@
     - name: Validate interface layout has bond0 interfaces
       ansible.builtin.assert:
         that:
-          - interface_layout | selectattr('bond', 'equalto', 'bond0') | list | length >= 1
-        fail_msg: "interface_layout must have at least one interface in bond0"
+          - interface_layout[item] | selectattr('bond', 'equalto', 'bond0') | list | length >= 1
+        fail_msg: "interface_layout.{{ item }} must have at least one interface in bond0"
+      loop: "{{ interface_layout | list }}"
 
     - name: Validate each host has correct number of MACs
       ansible.builtin.assert:
         that:
-          - item.macs | length == interface_layout | length
-        fail_msg: "Host {{ item.hostname }} has {{ item.macs | length }} MACs but interface_layout has {{ interface_layout | length }} entries"
+          - item.macs | length == interface_layout[item.role] | length
+        fail_msg: "Host {{ item.hostname }} has {{ item.macs | length }} MACs but interface_layout.{{ item.role }} has {{ interface_layout[item.role] | length }} entries"
       loop: "{{ hosts }}"
       loop_control:
         label: "{{ item.hostname }}"
