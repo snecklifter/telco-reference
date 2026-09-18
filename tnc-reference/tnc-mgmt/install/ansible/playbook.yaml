@@ -14,7 +14,6 @@
     installer_binary: openshift-install
     raid_enabled: "{{ storage is defined and storage.os_disks is defined and storage.os_disks | length > 1 }}"
     disconnected: "{{ mirror_registry is defined }}"
-    debug_password_hash: "{{ debug_password | password_hash('sha512') if debug_password is defined else '' }}"
 
   tasks:
     # --- Validation ---
@@ -119,7 +118,6 @@
         name:
           - httpd
           - nmstate
-          - coreos-installer
         state: present
         use_backend: dnf4
       become: true
@@ -253,32 +251,6 @@
 
     - name: Generate agent ISO
       ansible.builtin.command: "{{ installer_binary }} --dir {{ build_dir }} agent create image"
-
-    - name: Embed core user password into ISO
-      when: debug_password is defined
-      block:
-        - name: Extract existing Ignition config from ISO
-          ansible.builtin.command: >
-            coreos-installer iso ignition show
-            {{ build_dir }}/agent.x86_64.iso
-          register: existing_ignition
-
-        - name: Merge password into existing Ignition config
-          ansible.builtin.copy:
-            content: "{{ existing_ignition.stdout | from_json | combine({'passwd': {'users': [{'name': 'core', 'passwordHash': debug_password_hash}]}}, recursive=true) | to_nice_json }}"
-            dest: "{{ build_dir }}/merged.ign"
-            mode: "0600"
-
-        - name: Remove existing Ignition config from ISO
-          ansible.builtin.command: >
-            coreos-installer iso ignition remove
-            {{ build_dir }}/agent.x86_64.iso
-
-        - name: Embed merged Ignition config into ISO
-          ansible.builtin.command: >
-            coreos-installer iso ignition embed
-            {{ build_dir }}/agent.x86_64.iso
-            -i {{ build_dir }}/merged.ign
 
     - name: Copy ISO to HTTP server
       ansible.builtin.copy:
