@@ -1,0 +1,475 @@
+---
+# IRREVERSIBLE. Wipes every disk listed in `wipe.*` on every node in `hosts`.
+#
+# Deliberately a separate playbook from playbook.yaml so that a normal
+# deployment run can never destroy a disk.
+#
+# Interactive (normal use):
+#   ansible-playbook wipe-disks.yaml
+#
+# Unattended (CI / scripted rebuild) -- both overrides are required:
+#   ansible-playbook wipe-disks.yaml -e wipe_confirm=mgmt1 -e wipe_force=true
+#
+# How it works: boots each node from the agent ISO via Redfish virtual media,
+# SSHes into the RHCOS live environment as `core`, clears RAID metadata and
+# partition tables, then powers the node off.
+#
+# NOTE: this relies on the *agent* ISO, because that ISO carries the static
+# network configuration from agent-config.yaml -- which is what makes each node
+# reachable at its `host.ip` while running live. A generic RHCOS live ISO would
+# come up on DHCP with an unknown address and cannot be used here.
+
+- name: Confirm wipe and boot nodes into the live environment
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yaml
+
+  vars_prompt:
+    - name: wipe_confirm
+      private: false
+      prompt: |
+
+        ##############################################################
+        #                                                            #
+        #   IRREVERSIBLE DISK WIPE                                   #
+        #                                                            #
+        #   Every disk configured under `wipe:` in vars.yaml will be  #
+        #   erased on every node in the inventory. There is no undo.  #
+        #                                                            #
+        ##############################################################
+
+        Type the cluster name to confirm
+
+  vars:
+    wipe_force: false
+    wipe_cfg: "{{ wipe | default({}, true) }}"
+    wipe_iso_url: "{{ wipe_cfg.iso_url | default(bmc.iso_url) }}"
+
+  tasks:
+    # --- Gate 1: intent declared in vars.yaml ---
+
+    - name: Require wipe to be enabled in vars.yaml
+      ansible.builtin.assert:
+        that:
+          - wipe_cfg.enabled | default(false) | bool
+        fail_msg: >-
+          Disk wiping is disabled. Set `wipe.enabled: true` in vars.yaml to
+          allow this playbook to run.
+        success_msg: "Wipe enabled in vars.yaml"
+
+    # --- Gate 2: operator typed the cluster name ---
+
+    - name: Require the typed confirmation to match the cluster name
+      ansible.builtin.assert:
+        that:
+          - wipe_confirm is defined
+          - wipe_confirm | trim == cluster.name
+        fail_msg: >-
+          Confirmation "{{ wipe_confirm | default('') | trim }}" does not match
+          cluster name "{{ cluster.name }}". Aborting without touching any disk.
+        success_msg: "Confirmed wipe of cluster {{ cluster.name }}"
+
+    # --- Gate 3: nothing on this hardware may still be alive ---
+
+    # `failed_when: false` would mask wait_for's own outcome, so the probe runs
+    # in a block and records the result via the success/rescue paths instead.
+    - name: Probe the API VIP for a live cluster
+      when: not wipe_force | bool
+      block:
+        - name: Connect to the API VIP
+          ansible.builtin.wait_for:
+            host: "{{ networking.api_vip }}"
+            port: 6443
+            timeout: 5
+            state: started
+
+        - name: Record that the API VIP answered
+          ansible.builtin.set_fact:
+            wipe_api_alive: true
+      rescue:
+        - name: Record that the API VIP did not answer
+          ansible.builtin.set_fact:
+            wipe_api_alive: false
+
+    - name: Refuse to wipe while the cluster API is answering
+      ansible.builtin.assert:
+        that:
+          - not wipe_api_alive | default(false) | bool
+        fail_msg: >-
+          {{ networking.api_vip }}:6443 is answering -- a cluster appears to be
+          running on this hardware. Tear it down first, or re-run with
+          -e wipe_force=true if you are certain.
+        success_msg: "{{ networking.api_vip }}:6443 is not answering"
+      when: not wipe_force | bool
+
+    - name: Probe node addresses for running hosts
+      ansible.builtin.command: "timeout 3 ping -c 1 {{ item.ip }}"
+      register: wipe_ping
+      changed_when: false
+      failed_when: false
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      when: not wipe_force | bool
+
+    - name: Refuse to wipe while nodes are still reachable
+      ansible.builtin.assert:
+        that:
+          - wipe_ping.results | selectattr('rc', 'defined') | selectattr('rc', 'equalto', 0) | list | length == 0
+        fail_msg: >-
+          These nodes still respond to ping:
+          {{ wipe_ping.results | selectattr('rc', 'defined') | selectattr('rc', 'equalto', 0)
+             | map(attribute='item.hostname') | join(', ') }}.
+          Power them down first, or re-run with -e wipe_force=true.
+      when: not wipe_force | bool
+
+    # --- Gate 4: show the operator exactly what is targeted ---
+
+    - name: Build the per-host disk target list
+      ansible.builtin.set_fact:
+        wipe_plan: >-
+          {{ wipe_plan | default([]) + [{
+               'hostname': item.hostname,
+               'ip': item.ip,
+               'bmc': item.bmc_address,
+               'disks': (storage.os_disks | default([]))
+                        + (item.data_disks | default(wipe_cfg.data_disks | default([])))
+             }] }}
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Require at least one disk per host
+      ansible.builtin.assert:
+        that:
+          - item.disks | length > 0
+        fail_msg: >-
+          No disks resolved for {{ item.hostname }}. Set `storage.os_disks`, or
+          `wipe.data_disks`, or a per-host `data_disks:` entry.
+      loop: "{{ wipe_plan }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Show the wipe plan
+      ansible.builtin.debug:
+        msg: >-
+          {{ ['Cluster: ' + cluster.name + '.' + cluster.base_domain,
+              'Live ISO: ' + wipe_iso_url,
+              'Nodes:    ' + (wipe_plan | length | string),
+              'Discard:  ' + (wipe_cfg.discard | default(true) | string),
+              ''] +
+             (wipe_plan | map(attribute='hostname') | zip(
+                wipe_plan | map(attribute='disks') | map('join', ', '))
+              | map('join', '  ->  ') | list) }}
+
+    - name: Final chance to abort
+      ansible.builtin.pause:
+        prompt: >-
+          Press ENTER to wipe the disks listed above, or Ctrl-C then A to abort
+      when: not wipe_force | bool
+
+    # --- Boot nodes from the live ISO ---
+
+    - name: Power off nodes
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
+        category: Systems
+        command: PowerForceOff
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      ignore_errors: true
+
+    - name: Wait for nodes to power off
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: Eject existing virtual media
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
+        category: Manager
+        command: VirtualMediaEject
+        virtual_media:
+          image_url: "{{ wipe_iso_url }}"
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      ignore_errors: true
+
+    - name: Insert live ISO via virtual media
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
+        category: Manager
+        command: VirtualMediaInsert
+        virtual_media:
+          image_url: "{{ wipe_iso_url }}"
+          media_types:
+            - CD
+            - DVD
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Set boot override to virtual CD
+      ansible.builtin.uri:
+        url: "https://{{ item.bmc_address }}/redfish/v1/Systems/1"
+        method: PATCH
+        user: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          Boot:
+            BootSourceOverrideTarget: Cd
+            BootSourceOverrideEnabled: Once
+            BootSourceOverrideMode: UEFI
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Power on nodes
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
+        category: Systems
+        command: PowerOn
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    # --- Hand the nodes to the next play ---
+
+    - name: Register nodes as wipe targets
+      ansible.builtin.add_host:
+        name: "{{ item.hostname }}"
+        groups: wipe_targets
+        ansible_host: "{{ item.ip }}"
+        ansible_user: "{{ wipe_cfg.ssh_user | default('core') }}"
+        ansible_ssh_private_key_file: "{{ wipe_cfg.ssh_private_key | default(omit) }}"
+        ansible_ssh_common_args: >-
+          -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+        host_disks: "{{ item.disks }}"
+        host_discard: "{{ wipe_cfg.discard | default(true) }}"
+      loop: "{{ wipe_plan }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      changed_when: false
+
+- name: Wipe disks from the live environment
+  hosts: wipe_targets
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Wait for the live environment to come up on SSH
+      ansible.builtin.wait_for_connection:
+        delay: 30
+        timeout: 1200
+
+    - name: Identify the live root device
+      ansible.builtin.command: findmnt -n -o SOURCE /
+      register: wipe_live_root
+      changed_when: false
+
+    - name: Show current disk layout before wiping
+      ansible.builtin.command: lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT
+      register: wipe_lsblk_before
+      changed_when: false
+
+    - name: Report current disk layout
+      ansible.builtin.debug:
+        var: wipe_lsblk_before.stdout_lines
+
+    # NVMe enumeration is not guaranteed stable, so on a box with more disks
+    # than the OS uses, print model/serial/size for every disk and mark the
+    # targets. Read this before the wipe: it is the only place drift is visible.
+    - name: Identify every disk in the machine, marking the wipe targets
+      ansible.builtin.shell: |
+        set -uo pipefail
+        targets="{{ host_disks | join(' ') }}"
+        printf '%-14s %-9s %-30s %-24s %s\n' DEVICE SIZE MODEL SERIAL ACTION
+        lsblk -d -n -P -o NAME,SIZE,MODEL,SERIAL | while read -r line ; do
+          eval "$line"
+          # Substring match on a space-padded list: correct under sh, bash and
+          # zsh alike, unlike `for t in $targets`, which relies on the shell
+          # word-splitting an unquoted variable.
+          case " $targets " in
+            *" /dev/$NAME "*) action="*** WIPE ***" ;;
+            *) action="left untouched" ;;
+          esac
+          printf '%-14s %-9s %-30s %-24s %s\n' \
+            "/dev/$NAME" "$SIZE" "$MODEL" "$SERIAL" "$action"
+        done
+        exit 0
+      register: wipe_disk_identity
+      changed_when: false
+
+    - name: Report disk identity
+      ansible.builtin.debug:
+        var: wipe_disk_identity.stdout_lines
+
+    - name: Verify each target disk exists and is not the live root
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: wipe_disk_stat
+      loop: "{{ host_disks }}"
+
+    - name: Fail on a target disk that is missing or backing the live root
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isblk
+          - item.item not in wipe_live_root.stdout
+        fail_msg: >-
+          {{ item.item }} is not a usable block device, or is backing the live
+          root filesystem ({{ wipe_live_root.stdout }}).
+      loop: "{{ wipe_disk_stat.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # Order matters. Arrays must be stopped before their members can be zeroed,
+    # and superblocks must be zeroed before the partition table is destroyed --
+    # `sgdisk --zap-all` clears the table but not mdraid metadata, which with
+    # --metadata=1.0 sits at the *end* of each member partition and would
+    # otherwise survive to be auto-assembled on the next boot.
+    - name: Deactivate Ceph and LVM volume groups
+      ansible.builtin.shell: |
+        set -uo pipefail
+        vgchange -an || true
+        exit 0
+      changed_when: true
+
+    - name: Stop all active RAID arrays
+      ansible.builtin.shell: |
+        set -uo pipefail
+        mdadm --stop --scan || true
+        exit 0
+      changed_when: true
+
+    - name: Zero RAID superblocks, then clear signatures and partition tables
+      ansible.builtin.shell: |
+        set -uo pipefail
+        disk="{{ item }}"
+
+        # Members first: partitions carry the mdraid superblock.
+        for part in "${disk}"* ; do
+          [ "$part" = "$disk" ] && continue
+          [ -b "$part" ] || continue
+          mdadm --zero-superblock "$part" || true
+          wipefs -a "$part" || true
+        done
+
+        mdadm --zero-superblock "$disk" || true
+        wipefs -a "$disk" || true
+        sgdisk --zap-all "$disk" || true
+        {% if host_discard | bool %}
+        blkdiscard -f "$disk" || true
+        {% endif %}
+        exit 0
+      loop: "{{ host_disks }}"
+      changed_when: true
+
+    - name: Settle udev and re-read partition tables
+      ansible.builtin.shell: |
+        set -uo pipefail
+        udevadm settle || true
+        for disk in {{ host_disks | join(' ') }} ; do
+          partprobe "$disk" || true
+        done
+        udevadm settle || true
+        exit 0
+      changed_when: false
+
+    - name: Confirm disk layout after wiping
+      ansible.builtin.command: lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT
+      register: wipe_lsblk_after
+      changed_when: false
+
+    - name: Verify no filesystem or RAID signatures remain on target disks
+      ansible.builtin.command: "wipefs {{ item }}"
+      register: wipe_verify
+      changed_when: false
+      failed_when: wipe_verify.stdout | trim | length > 0
+      loop: "{{ host_disks }}"
+
+    - name: Report disk layout after wiping
+      ansible.builtin.debug:
+        var: wipe_lsblk_after.stdout_lines
+
+- name: Power off the wiped nodes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars.yaml
+
+  vars:
+    wipe_cfg: "{{ wipe | default({}, true) }}"
+    wipe_iso_url: "{{ wipe_cfg.iso_url | default(bmc.iso_url) }}"
+
+  tasks:
+    - name: Clear boot override
+      ansible.builtin.uri:
+        url: "https://{{ item.bmc_address }}/redfish/v1/Systems/1"
+        method: PATCH
+        user: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        headers:
+          Content-Type: application/json
+        body_format: json
+        body:
+          Boot:
+            BootSourceOverrideTarget: None
+            BootSourceOverrideEnabled: Disabled
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+
+    - name: Eject virtual media
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
+        category: Manager
+        command: VirtualMediaEject
+        virtual_media:
+          image_url: "{{ wipe_iso_url }}"
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      ignore_errors: true
+
+    - name: Power off nodes
+      community.general.redfish_command:
+        baseuri: "{{ item.bmc_address }}"
+        username: "{{ item.bmc_username }}"
+        password: "{{ item.bmc_password }}"
+        category: Systems
+        command: PowerForceOff
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      ignore_errors: true
+
+    - name: Wipe complete
+      ansible.builtin.debug:
+        msg:
+          - "Disks wiped on {{ hosts | length }} nodes -- all nodes powered off"
+          - "Set `wipe.enabled: false` in vars.yaml to re-arm the safety gate"
+          - "Run: ansible-playbook playbook.yaml"

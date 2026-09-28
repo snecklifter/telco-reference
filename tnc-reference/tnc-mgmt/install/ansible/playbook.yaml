@@ -14,6 +14,9 @@
     installer_binary: openshift-install
     raid_enabled: "{{ storage is defined and storage.os_disks is defined and storage.os_disks | length > 1 }}"
     disconnected: "{{ mirror_registry is defined }}"
+    # Ignition spec version emitted in the RAID MachineConfig. 3.5.0 matches
+    # OCP 4.19+; use 3.4.0 for 4.15-4.18.
+    ignition_spec_version: "3.5.0"
 
   tasks:
     # --- Validation ---
@@ -53,6 +56,29 @@
       loop: "{{ hosts }}"
       loop_control:
         label: "{{ item.hostname }}"
+
+    # With more disks in the box than the OS uses (e.g. 2 OS + 2 ODF), a data
+    # disk listed in os_disks would be repartitioned and wiped by the RAID
+    # MachineConfig. Catch that here rather than on the hardware.
+    - name: Validate OS disks are distinct and exclude data disks
+      ansible.builtin.assert:
+        that:
+          - storage.os_disks | unique | length == storage.os_disks | length
+          - storage.os_disks | intersect(item.data_disks | default([])) | length == 0
+          - storage.os_disks | intersect((wipe | default({}, true)).data_disks | default([])) | length == 0
+        fail_msg: >-
+          storage.os_disks {{ storage.os_disks }} must contain no duplicates and
+          must not overlap the data disks for {{ item.hostname }}
+          ({{ item.data_disks | default((wipe | default({}, true)).data_disks | default([])) }}).
+          Disks in os_disks are repartitioned and mirrored; everything else is
+          left untouched.
+        success_msg: >-
+          {{ item.hostname }}: os_disks {{ storage.os_disks | join(', ') }} are
+          distinct and exclude all data disks
+      loop: "{{ hosts }}"
+      loop_control:
+        label: "{{ item.hostname }}"
+      when: storage is defined and storage.os_disks is defined
 
     - name: Check if openshift-install is present
       ansible.builtin.command: "{{ installer_binary }} version"
@@ -239,6 +265,40 @@
       vars:
         role: "{{ item }}"
       loop: "{{ hosts | map(attribute='role') | unique | list }}"
+      when: raid_enabled | bool
+
+    # Regression guard for the defect that put every non-rendezvous control
+    # plane node into an emergency shell: arrays declared with no filesystem on
+    # them. A mirror is only bootable if md-root and md-boot are both formatted.
+    # This is the safety net that makes a hand-maintained template defensible --
+    # do not drop it.
+    - name: Read the rendered RAID MachineConfig
+      ansible.builtin.slurp:
+        src: "{{ build_dir }}/openshift/98-{{ item }}-raid1-mirror.yaml"
+      register: raid_mc_rendered
+      loop: "{{ hosts | map(attribute='role') | unique | list }}"
+      when: raid_enabled | bool
+
+    - name: Confirm the MachineConfig formats both mirrored arrays
+      ansible.builtin.assert:
+        that:
+          - mc_yaml.spec.config.storage.raid | map(attribute='name') | sort == ['md-boot', 'md-root']
+          - "'/dev/md/md-root' in mc_fs_devices"
+          - "'/dev/md/md-boot' in mc_fs_devices"
+          - mc_yaml.spec.config.storage.disks | length == storage.os_disks | length
+        fail_msg: >-
+          {{ item.item }} RAID MachineConfig does not format both mirrored
+          arrays. An array without a filesystem leaves dracut unable to find
+          root, which drops the node into an emergency shell on first boot.
+        success_msg: >-
+          {{ item.item }}: md-root and md-boot both formatted across
+          {{ storage.os_disks | length }} disks
+      vars:
+        mc_yaml: "{{ item.content | b64decode | from_yaml }}"
+        mc_fs_devices: "{{ mc_yaml.spec.config.storage.filesystems | map(attribute='device') | list }}"
+      loop: "{{ raid_mc_rendered.results }}"
+      loop_control:
+        label: "{{ item.item | default('') }}"
       when: raid_enabled | bool
 
     - name: Copy disconnected install manifests

@@ -1,4 +1,39 @@
 ---
+# Full boot-disk RAID 1 mirror: ESP + /boot + root mirrored across
+# storage.os_disks, so losing a single disk does not take the node down.
+#
+# This is the expanded Ignition equivalent of Butane's `boot_device.mirror`
+# sugar, and was verified to be semantically identical to `butane` output for
+# the two-disk case. The geometry is RHCOS's standard x86_64 layout and has been
+# unchanged from OCP 4.10 through 4.22: bios 1 MiB / esp 127 MiB / boot 384 MiB
+# / root takes the remainder. It is specified upstream by the CoreOS
+# full-disk-RAID design doc (coreos/enhancements/os/20201103-full-disk-raid.md),
+# which is what `boot_device.mirror` implements -- keep it matching.
+#
+# The ESP is deliberately NOT a RAID array: the initramfs saves the ESP contents
+# and restores them to every partition carrying the ESP type GUID, giving each
+# disk an independent, identical vfat filesystem. That is why the typeGuid on
+# each esp-N matters.
+#
+# DO NOT delete the `filesystems` entries for md-boot and md-root. Creating the
+# arrays without formatting them leaves dracut with no root filesystem to mount,
+# and every non-rendezvous control plane node drops into an emergency shell on
+# first boot from disk. That is not hypothetical -- it is the bug this template
+# replaced, and the playbook asserts against it after rendering.
+#
+# `wipeTable: true` on the install disk is safe *because* md-root is declared
+# below. Per the upstream design doc, the initramfs saves and restores the root
+# filesystem contents "whenever the config specifies a filesystem with label
+# `root` and `wipeFilesystem` set to `true`" -- those two properties are the
+# literal trigger, staged in RAM across the disks stage. Remove the md-root
+# filesystem entry, or its label, and that wipe becomes unrecoverable.
+#
+# The bios-* partitions are unused under UEFI but are part of the standard RHCOS
+# hybrid-boot layout; they cost 1 MiB and keep the mirror matching the stock
+# install disk.
+#
+# Use plain Jinja block tags, never the dash-stripping variant: Ansible already
+# sets trim_blocks and lstrip_blocks, and extra stripping collapses the YAML.
 apiVersion: machineconfiguration.openshift.io/v1
 kind: MachineConfig
 metadata:
@@ -8,34 +43,54 @@ metadata:
 spec:
   config:
     ignition:
-      version: 3.4.0
+      version: {{ ignition_spec_version }}
     storage:
       disks:
-        - device: {{ storage.os_disks[1] }}
+{% for disk in storage.os_disks %}
+        - device: {{ disk }}
           wipeTable: true
           partitions:
-            - label: esp-mirror
-              sizeMiB: 200
+            - label: bios-{{ loop.index }}
+              sizeMiB: 1
+              typeGuid: 21686148-6449-6E6F-744E-656564454649
+            - label: esp-{{ loop.index }}
+              sizeMiB: 127
               typeGuid: C12A7328-F81F-11D2-BA4B-00A0C93EC93B
-            - label: boot-mirror
-              sizeMiB: 1024
-            - label: root-mirror
+            - label: boot-{{ loop.index }}
+              sizeMiB: 384
+            - label: root-{{ loop.index }}
+{% endfor %}
       raid:
         - name: md-boot
           level: raid1
           devices:
-            - /dev/disk/by-partlabel/boot
-            - /dev/disk/by-partlabel/boot-mirror
+{% for disk in storage.os_disks %}
+            - /dev/disk/by-partlabel/boot-{{ loop.index }}
+{% endfor %}
           options:
-            - "--metadata=1.0"
+            # metadata 1.0 puts the superblock at the END of the member, leaving
+            # the filesystem readable at the partition start so the bootloader
+            # can read /boot directly from either disk. md-root deliberately
+            # uses the mdadm default (1.2) instead.
+            - --metadata=1.0
         - name: md-root
           level: raid1
           devices:
-            - /dev/disk/by-partlabel/root
-            - /dev/disk/by-partlabel/root-mirror
-          options:
-            - "--metadata=1.0"
+{% for disk in storage.os_disks %}
+            - /dev/disk/by-partlabel/root-{{ loop.index }}
+{% endfor %}
       filesystems:
-        - device: /dev/disk/by-partlabel/esp-mirror
+{% for disk in storage.os_disks %}
+        - device: /dev/disk/by-partlabel/esp-{{ loop.index }}
           format: vfat
-          label: EFI-MIRROR
+          label: esp-{{ loop.index }}
+          wipeFilesystem: true
+{% endfor %}
+        - device: /dev/md/md-boot
+          format: ext4
+          label: boot
+          wipeFilesystem: true
+        - device: /dev/md/md-root
+          format: xfs
+          label: root
+          wipeFilesystem: true
