@@ -75,12 +75,13 @@
   changed_when: false
   no_log: true
 
-- name: Generate and write PostgreSQL password to Vault
+- name: Generate and write PostgreSQL credentials to Vault
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
     -n vault exec vault-0 --
     sh -c 'VAULT_TOKEN={{ vault_root_token }}
     vault kv put {{ configuration.vault.secret_path }}/gitlab/postgres
+    username={{ configuration.gitlab.psql.username }}
     password={{ lookup("ansible.builtin.password", "/dev/null length=24 chars=ascii_letters,digits") }}'
   no_log: true
   when: vault_postgres_check.rc != 0

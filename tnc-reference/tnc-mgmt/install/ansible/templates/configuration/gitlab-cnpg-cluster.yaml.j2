@@ -1,0 +1,112 @@
+---
+apiVersion: postgresql.k8s.enterprisedb.io/v1
+kind: Cluster
+metadata:
+  name: gitlab-postgres
+  namespace: gitlab-system
+spec:
+  affinity:
+    podAntiAffinityType: preferred
+  backup:
+    target: prefer-standby
+    volumeSnapshot:
+      online: true
+      onlineConfiguration:
+        immediateCheckpoint: false
+        waitForArchive: true
+      snapshotOwnerReference: none
+  bootstrap:
+    initdb:
+      database: {{ configuration.gitlab.psql.database }}
+      encoding: UTF8
+      localeCType: C
+      localeCollate: C
+      owner: {{ configuration.gitlab.psql.username }}
+      postInitSQL:
+        - CREATE EXTENSION IF NOT EXISTS pg_trgm;
+        - CREATE EXTENSION IF NOT EXISTS btree_gist;
+        - CREATE EXTENSION IF NOT EXISTS plpgsql;
+      secret:
+        name: gitlab-postgres-creds
+  enablePDB: true
+  enableSuperuserAccess: false
+  failoverDelay: 0
+  imageName: {{ configuration.gitlab.postgres.image }}
+  imagePullSecrets:
+    - name: edb-pull-secret
+  instances: {{ configuration.gitlab.postgres.instances | default(3) }}
+  logLevel: info
+  maxSyncReplicas: 0
+  minSyncReplicas: 0
+  monitoring:
+    customQueriesConfigMap:
+      - key: queries
+        name: postgresql-operator-default-monitoring
+    disableDefaultQueries: false
+    enablePodMonitor: true
+  postgresGID: 26
+  postgresql:
+    parameters:
+      archive_mode: "on"
+      archive_timeout: 5min
+      dynamic_shared_memory_type: posix
+      full_page_writes: "on"
+      log_destination: csvlog
+      log_directory: /controller/log
+      log_filename: postgres
+      log_rotation_age: "0"
+      log_rotation_size: "0"
+      log_truncate_on_rotation: "false"
+      logging_collector: "on"
+      max_connections: "400"
+      max_locks_per_transaction: "256"
+      max_parallel_workers: "32"
+      max_replication_slots: "32"
+      max_slot_wal_keep_size: "-1"
+      max_worker_processes: "32"
+      shared_buffers: 2GB
+      shared_memory_type: mmap
+      ssl_max_protocol_version: TLSv1.3
+      ssl_min_protocol_version: TLSv1.3
+      wal_keep_size: 512MB
+      wal_level: logical
+      wal_log_hints: "on"
+      wal_receiver_timeout: 5s
+      wal_sender_timeout: 60s
+    syncReplicaElectionConstraint:
+      enabled: false
+  postgresUID: 26
+  primaryUpdateMethod: restart
+  primaryUpdateStrategy: unsupervised
+  probes:
+    liveness:
+      isolationCheck:
+        connectionTimeout: 1000
+        enabled: true
+        requestTimeout: 1000
+  replicationSlots:
+    highAvailability:
+      enabled: true
+      slotPrefix: _cnp_
+    synchronizeReplicas:
+      enabled: true
+    updateInterval: 30
+  resources:
+    limits:
+      cpu: {{ configuration.gitlab.postgres.resources.limits.cpu | default("750m") }}
+      memory: {{ configuration.gitlab.postgres.resources.limits.memory | default("4Gi") }}
+    requests:
+      cpu: {{ configuration.gitlab.postgres.resources.requests.cpu | default("500m") }}
+      memory: {{ configuration.gitlab.postgres.resources.requests.memory | default("2Gi") }}
+  smartShutdownTimeout: 180
+  startDelay: 3600
+  stopDelay: 1800
+  storage:
+    resizeInUseVolumes: true
+    size: {{ configuration.gitlab.postgres.storage_size }}
+    storageClass: {{ configuration.gitlab.postgres.storage_class }}
+  switchoverDelay: 3600
+  walStorage:
+    resizeInUseVolumes: true
+    size: {{ configuration.gitlab.postgres.wal_storage_size | default("15Gi") }}
+    storageClass: {{ configuration.gitlab.postgres.storage_class }}

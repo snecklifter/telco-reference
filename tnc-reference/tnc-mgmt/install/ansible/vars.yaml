@@ -153,10 +153,21 @@ configuration:
     registry_enabled: false
     keycloak_enabled: false
     postgres:
-      image: registry.redhat.io/rhel9/postgresql-18
-      image_tag: "latest"
-      storage_size: "10Gi"
+      image: docker.enterprisedb.com/k8s/postgresql:17-standard-ubi9
+      instances: 3
+      storage_size: "100Gi"
+      wal_storage_size: "15Gi"
       storage_class: ocs-storagecluster-ceph-rbd
+      pull_secret:
+        username: REDACTED
+        password: REDACTED
+      resources:
+        limits:
+          cpu: "750m"
+          memory: "4Gi"
+        requests:
+          cpu: "500m"
+          memory: "2Gi"
     psql:
       host: gitlab-postgres-rw
       port: 5432

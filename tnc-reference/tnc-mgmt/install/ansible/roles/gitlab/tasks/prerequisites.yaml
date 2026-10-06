@@ -170,14 +170,64 @@
     - gitlab-registry-storage
     - "{{ configuration.gitlab.psql.secret }}"
     - "{{ configuration.gitlab.redis.secret }}"
+    - gitlab-postgres-creds
 
-# --- PostgreSQL and Redis ---
+# --- EDB CNPG Operator ---
 
-- name: Template PostgreSQL deployment
-  ansible.builtin.template:
-    src: configuration/gitlab-postgresql.yaml.j2
-    dest: "{{ config_stage_dir }}/gitlab-postgresql.yaml"
-    mode: "0644"
+- name: Install EDB CNPG operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/cnpg-operator.yaml
+
+- name: Wait for CNPG operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n postgresql-operator-system get subscriptions.operators.coreos.com
+    cloud-native-postgresql -o jsonpath='{.status.state}'
+  register: cnpg_state
+  until: cnpg_state.stdout == "AtLatestKnown"
+  retries: 30
+  delay: 20
+  changed_when: false
+
+- name: Wait for CNPG Cluster CRD
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    get crd clusters.postgresql.k8s.enterprisedb.io
+  register: cnpg_crd
+  until: cnpg_crd.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Create EDB pull secret
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n gitlab-system create secret docker-registry edb-pull-secret
+    --docker-server=docker.enterprisedb.com
+    --docker-username={{ configuration.gitlab.postgres.pull_secret.username }}
+    --docker-password={{ configuration.gitlab.postgres.pull_secret.password }}
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  no_log: true
+
+# --- PostgreSQL (CNPG) and Redis ---
+
+- name: Deploy CNPG PostgreSQL cluster
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/gitlab-cnpg-cluster.yaml
+
+- name: Wait for CNPG cluster to be ready
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n gitlab-system get cluster gitlab-postgres
+    -o jsonpath='{.status.phase}'
+  register: cnpg_phase
+  until: cnpg_phase.stdout == "Cluster in healthy state"
+  retries: 60
+  delay: 15
+  changed_when: false
 
 - name: Template Redis deployment
   ansible.builtin.template:
@@ -185,18 +235,10 @@
     dest: "{{ config_stage_dir }}/gitlab-redis.yaml"
     mode: "0644"
 
-- name: Deploy PostgreSQL and Redis
+- name: Deploy Redis
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }} apply
-    -f {{ config_stage_dir }}/gitlab-postgresql.yaml
     -f {{ config_stage_dir }}/gitlab-redis.yaml
-
-- name: Wait for PostgreSQL to be ready
-  ansible.builtin.command: >
-    oc --kubeconfig {{ kubeconfig_path }}
-    -n gitlab-system wait --for=condition=Available
-    deployment/gitlab-postgres --timeout=300s
-  changed_when: false
 
 - name: Wait for Redis to be ready
   ansible.builtin.command: >
