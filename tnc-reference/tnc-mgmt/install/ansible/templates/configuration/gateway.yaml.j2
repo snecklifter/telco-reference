@@ -13,6 +13,9 @@ metadata:
   namespace: {{ configuration.gateway.namespace }}
 spec:
   gatewayClassName: {{ configuration.gateway.class_name | default('openshift-default') }}
+  addresses:
+    - type: IPAddress
+      value: {{ networking.gateway_vip }}
   listeners:
     - name: https
       protocol: HTTPS
