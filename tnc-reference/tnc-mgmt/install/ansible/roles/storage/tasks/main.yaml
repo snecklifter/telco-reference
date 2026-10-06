@@ -168,6 +168,44 @@
     - "'odf' in configuration.components"
     - odf_overlay_result.rc != 0
 
+- name: Check Ceph cluster health
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-storage get cephcluster ocs-storagecluster-cephcluster
+    -o jsonpath='{.status.ceph.health}'
+  register: ceph_health
+  until: ceph_health.stdout == "HEALTH_OK"
+  retries: 60
+  delay: 30
+  changed_when: false
+  when: "'odf' in configuration.components"
+
+- name: Get OSD count
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-storage get pods -l app=rook-ceph-osd
+    --no-headers
+  register: osd_pods
+  changed_when: false
+  when: "'odf' in configuration.components"
+
+- name: Calculate expected OSD count
+  ansible.builtin.set_fact:
+    expected_osds: "{{ (worker_nodes.stdout_lines | length) * (configuration.odf.disk_paths | length) }}"
+  when: "'odf' in configuration.components"
+
+- name: Verify all disks are in use
+  ansible.builtin.assert:
+    that:
+      - (osd_pods.stdout_lines | length) == (expected_osds | int)
+    fail_msg: >-
+      Expected {{ expected_osds }} OSDs ({{ worker_nodes.stdout_lines | length }} workers ×
+      {{ configuration.odf.disk_paths | length }} disks) but found {{ osd_pods.stdout_lines | length }}
+    success_msg: >-
+      ODF healthy: {{ osd_pods.stdout_lines | length }} OSDs across
+      {{ worker_nodes.stdout_lines | length }} workers, Ceph {{ ceph_health.stdout }}
+  when: "'odf' in configuration.components"
+
 # --- OpenShift Virtualization (CNV) ---
 
 - name: Install OpenShift Virtualization operator
