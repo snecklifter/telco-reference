@@ -47,11 +47,12 @@
     (item.component == '_always' or item.component in configuration.components)
     and (item.requires | default('') == '' or item.requires in configuration.components)
 
-- name: Find all YAML files in staging area reference-crs
+- name: Find all YAML files in staging area reference-crs and other-crs
   ansible.builtin.find:
     paths:
       - "{{ config_stage_dir }}/reference-crs/optional"
       - "{{ config_stage_dir }}/reference-crs/required"
+      - "{{ config_stage_dir }}/other-crs/optional"
     patterns: '*.yaml'
     recurse: true
   register: reference_crs_files
@@ -70,6 +71,7 @@
     paths:
       - "{{ config_stage_dir }}/reference-crs/optional"
       - "{{ config_stage_dir }}/reference-crs/required"
+      - "{{ config_stage_dir }}/other-crs/optional"
     patterns: '*Subscription.yaml'
     recurse: true
   register: subscription_files
