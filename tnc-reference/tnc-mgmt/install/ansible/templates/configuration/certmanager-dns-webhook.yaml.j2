@@ -153,7 +153,7 @@ spec:
           args:
             - --tls-cert-file=/tls/tls.crt
             - --tls-private-key-file=/tls/tls.key
-            - --port=8443
+            - --secure-port=8443
           env:
             - name: GROUP_NAME
               value: {{ configuration.certmanager.webhook.group_name }}
