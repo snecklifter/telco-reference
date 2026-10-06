@@ -19,11 +19,21 @@
   delay: 20
   changed_when: false
 
+- name: Wait for ArgoCD server deployment
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-gitops get deployment openshift-gitops-server
+  register: argocd_deploy
+  until: argocd_deploy.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+
 - name: Wait for ArgoCD pods to be ready
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
     -n openshift-gitops wait --for=condition=Ready pod
-    --all --timeout=300s
+    -l app.kubernetes.io/part-of=argocd --timeout=300s
   changed_when: false
 
 - name: Wait for MultiClusterHub to be running
