@@ -44,6 +44,12 @@ spec:
                   key: {{ configuration.gitlab.psql.secret_key }}
             - name: POSTGRESQL_DATABASE
               value: {{ configuration.gitlab.psql.database }}
+            - name: POSTGRESQL_MAX_CONNECTIONS
+              value: "200"
+            - name: POSTGRESQL_SHARED_BUFFERS
+              value: 256MB
+            - name: POSTGRESQL_EXTRA_FLAGS
+              value: -c max_locks_per_transaction=256
           volumeMounts:
             - name: data
               mountPath: /var/lib/pgsql/data
