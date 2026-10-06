@@ -167,3 +167,88 @@
   when:
     - "'odf' in configuration.components"
     - odf_overlay_result.rc != 0
+
+# --- OpenShift Virtualization (CNV) ---
+
+- name: Install OpenShift Virtualization operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }} apply
+    -f {{ config_stage_dir }}/other-crs/optional/cnv/CnvNS.yaml
+    -f {{ config_stage_dir }}/other-crs/optional/cnv/CnvOperGroup.yaml
+    -f {{ config_stage_dir }}/other-crs/optional/cnv/CnvSubscription.yaml
+  when: "'cnv' in configuration.components"
+
+- name: Wait for CNV install plan
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-cnv get installplan
+    -o jsonpath='{.items[0].metadata.name}'
+  register: cnv_installplan
+  until: cnv_installplan.rc == 0 and cnv_installplan.stdout | length > 0
+  retries: 30
+  delay: 10
+  changed_when: false
+  when: "'cnv' in configuration.components"
+
+- name: Approve CNV install plan
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-cnv patch installplan {{ cnv_installplan.stdout }}
+    --type merge -p '{"spec":{"approved":true}}'
+  when: "'cnv' in configuration.components"
+
+- name: Wait for CNV operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-cnv get subscriptions.operators.coreos.com
+    hco-operatorhub -o jsonpath='{.status.state}'
+  register: cnv_state
+  until: cnv_state.stdout == "AtLatestKnown"
+  retries: 30
+  delay: 20
+  changed_when: false
+  when: "'cnv' in configuration.components"
+
+- name: Wait for HyperConverged CRD
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    get crd hyperconvergeds.hco.kubevirt.io
+  register: hco_crd
+  until: hco_crd.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+  when: "'cnv' in configuration.components"
+
+# --- Cluster Logging ---
+
+- name: Install Cluster Logging operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }} apply
+    -f {{ config_stage_dir }}/reference-crs/optional/logging/clusterLogNS.yaml
+    -f {{ config_stage_dir }}/reference-crs/optional/logging/clusterLogOperGroup.yaml
+    -f {{ config_stage_dir }}/reference-crs/optional/logging/clusterLogSubscription.yaml
+  when: "'logging' in configuration.components"
+
+- name: Wait for Cluster Logging operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-logging get subscriptions.operators.coreos.com
+    cluster-logging -o jsonpath='{.status.state}'
+  register: logging_state
+  until: logging_state.stdout == "AtLatestKnown"
+  retries: 30
+  delay: 20
+  changed_when: false
+  when: "'logging' in configuration.components"
+
+- name: Wait for ClusterLogForwarder CRD
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    get crd clusterlogforwarders.observability.openshift.io
+  register: clf_crd
+  until: clf_crd.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+  when: "'logging' in configuration.components"
