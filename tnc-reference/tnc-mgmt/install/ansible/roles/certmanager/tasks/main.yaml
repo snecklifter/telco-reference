@@ -17,12 +17,6 @@
       dest: certmanager-clusterissuer.yaml
     - src: certmanager-wildcard-cert.yaml.j2
       dest: certmanager-wildcard-cert.yaml
-    - src: gateway.yaml.j2
-      dest: gateway.yaml
-    - src: metallb.yaml.j2
-      dest: metallb.yaml
-    - src: metallb-config.yaml.j2
-      dest: metallb-config.yaml
   loop_control:
     label: "{{ item.dest }}"
 
@@ -128,66 +122,6 @@
   delay: 30
   changed_when: false
 
-# --- MetalLB for bare metal LoadBalancer services ---
-
-- name: Install MetalLB operator
-  ansible.builtin.command: >
-    oc --kubeconfig {{ kubeconfig_path }}
-    apply -f {{ config_stage_dir }}/metallb.yaml
-
-- name: Wait for MetalLB operator
-  ansible.builtin.command: >
-    oc --kubeconfig {{ kubeconfig_path }}
-    -n metallb-system get subscriptions.operators.coreos.com
-    metallb-operator -o jsonpath='{.status.state}'
-  register: metallb_state
-  until: metallb_state.stdout == "AtLatestKnown"
-  retries: 30
-  delay: 20
-  changed_when: false
-
-- name: Wait for MetalLB CRD
-  ansible.builtin.command: >
-    oc --kubeconfig {{ kubeconfig_path }}
-    get crd metallbs.metallb.io
-  register: metallb_crd
-  until: metallb_crd.rc == 0
-  retries: 30
-  delay: 10
-  changed_when: false
-
-- name: Create MetalLB instance and address pool
-  ansible.builtin.command: >
-    oc --kubeconfig {{ kubeconfig_path }}
-    apply -f {{ config_stage_dir }}/metallb-config.yaml
-
-- name: Wait for MetalLB controller
-  ansible.builtin.command: >
-    oc --kubeconfig {{ kubeconfig_path }}
-    -n metallb-system wait --for=condition=Available
-    deployment/controller --timeout=300s
-  changed_when: false
-
-# --- GatewayAPI Gateway ---
-
-- name: Create GatewayAPI Gateway
-  ansible.builtin.command: >
-    oc --kubeconfig {{ kubeconfig_path }}
-    apply -f {{ config_stage_dir }}/gateway.yaml
-
-- name: Wait for Gateway to be accepted
-  ansible.builtin.command: >
-    oc --kubeconfig {{ kubeconfig_path }}
-    -n {{ configuration.gateway.namespace }} get gateway {{ configuration.gateway.name }}
-    -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}'
-  register: gw_accepted
-  until: gw_accepted.stdout == "True"
-  retries: 30
-  delay: 10
-  changed_when: false
-
-- name: Wildcard certificate and Gateway ready
+- name: Wildcard certificate ready
   ansible.builtin.debug:
-    msg:
-      - "Wildcard TLS certificate issued for *.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
-      - "Gateway {{ configuration.gateway.name }} accepting routes from all namespaces"
+    msg: "Wildcard TLS certificate issued for *.apps.{{ cluster.name }}.{{ cluster.base_domain }}"

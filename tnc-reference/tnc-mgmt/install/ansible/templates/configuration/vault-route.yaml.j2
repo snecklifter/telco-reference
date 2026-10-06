@@ -1,0 +1,16 @@
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: vault
+  namespace: vault
+spec:
+  host: vault.apps.{{ cluster.name }}.{{ cluster.base_domain }}
+  to:
+    kind: Service
+    name: vault-active
+  port:
+    targetPort: 8200
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

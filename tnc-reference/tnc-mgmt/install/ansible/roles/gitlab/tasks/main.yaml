@@ -11,8 +11,8 @@
       dest: gitlab-subscription.yaml
     - src: gitlab-cr.yaml.j2
       dest: gitlab-cr.yaml
-    - src: gitlab-httproutes.yaml.j2
-      dest: gitlab-httproutes.yaml
+    - src: gitlab-routes.yaml.j2
+      dest: gitlab-routes.yaml
     - src: gitlab-external-secrets.yaml.j2
       dest: gitlab-external-secrets.yaml
   loop_control:
@@ -63,10 +63,10 @@
     oc --kubeconfig {{ kubeconfig_path }}
     apply -f {{ config_stage_dir }}/gitlab-cr.yaml
 
-- name: Create GitLab HTTPRoutes
+- name: Create GitLab Routes
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
-    apply -f {{ config_stage_dir }}/gitlab-httproutes.yaml
+    apply -f {{ config_stage_dir }}/gitlab-routes.yaml
 
 - name: Wait for GitLab to be running
   ansible.builtin.command: >

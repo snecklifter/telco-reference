@@ -11,7 +11,6 @@ networking:
   service_network_cidr: 172.30.0.0/16
   api_vip: 172.31.61.4
   ingress_vip: 172.31.61.5
-  gateway_vip: 172.31.61.6
 
   mtu: 8950
   bond_mode: "802.3ad"
@@ -111,11 +110,6 @@ configuration:
     # - kafka
     # - monitoring-kafka
     # - gitops-ztp
-
-  # GatewayAPI — gateway used for external access to Vault, GitLab, etc.
-  gateway:
-    name: default-gateway
-    namespace: openshift-ingress
 
   # Operator catalog source — connected clusters use redhat-operators;
   # disconnected use redhat-operators-disconnected (must match your CatalogSource)

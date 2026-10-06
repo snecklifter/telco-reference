@@ -1,0 +1,32 @@
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: gitlab
+  namespace: gitlab-system
+spec:
+  host: gitlab.apps.{{ cluster.name }}.{{ cluster.base_domain }}
+  to:
+    kind: Service
+    name: gitlab-webservice-default
+  port:
+    targetPort: 8181
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: gitlab-pages
+  namespace: gitlab-system
+spec:
+  host: {{ configuration.gitlab.pages_subdomain }}.apps.{{ cluster.name }}.{{ cluster.base_domain }}
+  to:
+    kind: Service
+    name: gitlab-gitlab-pages
+  port:
+    targetPort: 8090
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
