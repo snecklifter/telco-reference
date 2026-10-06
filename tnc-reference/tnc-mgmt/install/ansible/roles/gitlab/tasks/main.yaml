@@ -90,8 +90,9 @@
   ansible.builtin.uri:
     url: "https://{{ gitlab_host }}/api/v4/version"
     validate_certs: false
+    status_code: [200, 401]
   register: gitlab_api
-  until: gitlab_api.status == 200
+  until: gitlab_api.status in [200, 401]
   retries: 30
   delay: 20
 
