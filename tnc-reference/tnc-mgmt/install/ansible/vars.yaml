@@ -106,6 +106,8 @@ configuration:
     - quay
     - logging
     - cnv
+    - keycloak
+    - devspaces
     # - registry        # disconnected only
     # - kafka
     # - monitoring-kafka

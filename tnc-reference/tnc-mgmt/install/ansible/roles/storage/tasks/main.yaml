@@ -252,3 +252,57 @@
   delay: 10
   changed_when: false
   when: "'logging' in configuration.components"
+
+# --- Keycloak (RHBK) ---
+
+- name: Render Keycloak operator manifest
+  ansible.builtin.template:
+    src: configuration/keycloak-operator.yaml.j2
+    dest: "{{ config_stage_dir }}/keycloak-operator.yaml"
+    mode: "0644"
+  when: "'keycloak' in configuration.components"
+
+- name: Install Keycloak operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/keycloak-operator.yaml
+  when: "'keycloak' in configuration.components"
+
+- name: Wait for Keycloak operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n rhbk-operator get subscriptions.operators.coreos.com
+    rhbk-operator -o jsonpath='{.status.state}'
+  register: keycloak_state
+  until: keycloak_state.stdout == "AtLatestKnown"
+  retries: 30
+  delay: 20
+  changed_when: false
+  when: "'keycloak' in configuration.components"
+
+# --- DevSpaces ---
+
+- name: Render DevSpaces operator manifest
+  ansible.builtin.template:
+    src: configuration/devspaces-operator.yaml.j2
+    dest: "{{ config_stage_dir }}/devspaces-operator.yaml"
+    mode: "0644"
+  when: "'devspaces' in configuration.components"
+
+- name: Install DevSpaces operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/devspaces-operator.yaml
+  when: "'devspaces' in configuration.components"
+
+- name: Wait for DevSpaces operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-devspaces get subscriptions.operators.coreos.com
+    devspaces -o jsonpath='{.status.state}'
+  register: devspaces_state
+  until: devspaces_state.stdout == "AtLatestKnown"
+  retries: 30
+  delay: 20
+  changed_when: false
+  when: "'devspaces' in configuration.components"
