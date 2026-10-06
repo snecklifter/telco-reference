@@ -1,0 +1,27 @@
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ configuration.gateway.class_name | default('openshift-default') }}
+spec:
+  controllerName: openshift.io/gateway-controller/v1
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ configuration.gateway.name }}
+  namespace: {{ configuration.gateway.namespace }}
+spec:
+  gatewayClassName: {{ configuration.gateway.class_name | default('openshift-default') }}
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: "*.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: ingress-wildcard-cert
+      allowedRoutes:
+        namespaces:
+          from: All
