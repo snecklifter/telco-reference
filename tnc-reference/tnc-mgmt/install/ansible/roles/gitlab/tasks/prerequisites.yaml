@@ -224,7 +224,7 @@
 - name: Wait for CNPG cluster to be ready
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
-    -n gitlab-system get cluster gitlab-postgres
+    -n gitlab-system get clusters.postgresql.k8s.enterprisedb.io gitlab-postgres
     -o jsonpath='{.status.phase}'
   register: cnpg_phase
   until: cnpg_phase.stdout == "Cluster in healthy state"
