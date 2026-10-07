@@ -307,7 +307,7 @@
 - name: Wait for Keycloak operator
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
-    -n rhbk-operator get subscriptions.operators.coreos.com
+    -n keycloak get subscriptions.operators.coreos.com
     rhbk-operator -o jsonpath='{.status.state}'
   register: keycloak_state
   until: keycloak_state.stdout == "AtLatestKnown"
