@@ -106,6 +106,15 @@ spec:
               mountPath: /config-source
             - name: config
               mountPath: /config
+        - name: debug-perms
+          image: registry.access.redhat.com/hi/bind:latest
+          command: ['sh', '-c', 'echo "=== UID ===" && id && echo "=== /etc/named/ ===" && ls -la /etc/named/ && echo "=== cat test ===" && cat /etc/named/hbird-defaults.conf | head -3 && echo "=== SUCCESS ==="']
+          volumeMounts:
+            - name: config
+              mountPath: /etc/named
+            - name: zones
+              mountPath: /var/named/zones
+              readOnly: true
       containers:
         - name: bind
           image: registry.access.redhat.com/hi/bind:latest
