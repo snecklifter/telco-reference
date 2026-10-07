@@ -41,7 +41,8 @@ additionalTrustBundle: |
 {{ mirror_registry.ca_bundle | indent(2, first=true) }}
 {% endif %}
 {% if configuration.gitlab.postgres.pull_secret is defined %}
-{% set merged_auths = (pull_secret | from_json).auths | combine({configuration.gitlab.postgres.pull_secret.server: {"username": configuration.gitlab.postgres.pull_secret.username, "password": configuration.gitlab.postgres.pull_secret.password}}) %}
+{% set edb_auth = (configuration.gitlab.postgres.pull_secret.username + ":" + configuration.gitlab.postgres.pull_secret.password) | b64encode %}
+{% set merged_auths = (pull_secret | from_json).auths | combine({configuration.gitlab.postgres.pull_secret.server: {"auth": edb_auth, "username": configuration.gitlab.postgres.pull_secret.username, "password": configuration.gitlab.postgres.pull_secret.password}}) %}
 pullSecret: '{{ (pull_secret | from_json | combine({"auths": merged_auths})) | to_json }}'
 {% else %}
 pullSecret: '{{ pull_secret }}'
