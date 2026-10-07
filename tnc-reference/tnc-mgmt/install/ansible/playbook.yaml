@@ -18,6 +18,7 @@
     ignition_spec_version: "3.5.0"
 
   roles:
+    - bmc_harden
     - validate
     - prerequisites
     - dns

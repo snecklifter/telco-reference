@@ -1,0 +1,35 @@
+---
+- name: Disable IPMI over LAN on BMCs
+  ansible.builtin.uri:
+    url: "https://{{ item.bmc_address }}/redfish/v1/Managers/1/NetworkProtocol"
+    method: PATCH
+    user: "{{ item.bmc_username }}"
+    password: "{{ item.bmc_password }}"
+    body_format: json
+    body:
+      IPMI:
+        ProtocolEnabled: false
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 204]
+  loop: "{{ hosts }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+  no_log: true
+
+- name: Disable BMC ToHost USB ethernet interface
+  ansible.builtin.uri:
+    url: "https://{{ item.bmc_address }}/redfish/v1/Managers/1/EthernetInterfaces/ToHost"
+    method: PATCH
+    user: "{{ item.bmc_username }}"
+    password: "{{ item.bmc_password }}"
+    body_format: json
+    body:
+      InterfaceEnabled: false
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200, 204]
+  loop: "{{ hosts }}"
+  loop_control:
+    label: "{{ item.hostname }}"
+  no_log: true
