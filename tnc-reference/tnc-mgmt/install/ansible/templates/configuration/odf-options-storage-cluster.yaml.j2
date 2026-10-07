@@ -1,5 +1,9 @@
 ---
 - op: replace
+  path: /spec/storageDeviceSets/0/count
+  value: {{ configuration.odf.disk_paths | length }}
+
+- op: replace
   path: /spec/storageDeviceSets/0/dataPVCTemplate/spec/resources/requests/storage
   value: "{{ configuration.odf.storage_size }}"
 
