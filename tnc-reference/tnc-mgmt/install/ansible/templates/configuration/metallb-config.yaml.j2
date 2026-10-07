@@ -11,6 +11,7 @@ metadata:
   name: default-pool
   namespace: metallb-system
 spec:
+  autoAssign: false
   addresses:
     - {{ networking.metallb_pool }}
 ---
