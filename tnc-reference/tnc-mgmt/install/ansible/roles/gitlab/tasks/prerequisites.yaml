@@ -173,6 +173,8 @@
     - gitlab-postgres-creds
 
 # --- EDB CNPG Operator ---
+# EDB pull secret (docker.enterprisedb.com) must be included in the
+# cluster pull_secret in vars.yaml before installation.
 
 - name: Install EDB CNPG operator
   ansible.builtin.command: >
@@ -200,16 +202,6 @@
   delay: 10
   changed_when: false
 
-- name: Create EDB pull secret
-  ansible.builtin.shell: >
-    oc --kubeconfig {{ kubeconfig_path }}
-    -n gitlab-system create secret docker-registry edb-pull-secret
-    --docker-server=docker.enterprisedb.com
-    --docker-username={{ configuration.gitlab.postgres.pull_secret.username }}
-    --docker-password={{ configuration.gitlab.postgres.pull_secret.password }}
-    --dry-run=client -o yaml |
-    oc --kubeconfig {{ kubeconfig_path }} apply -f -
-  no_log: true
 
 # --- PostgreSQL (CNPG) and Redis ---
 

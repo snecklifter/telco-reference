@@ -32,8 +32,6 @@ spec:
   enableSuperuserAccess: false
   failoverDelay: 0
   imageName: {{ configuration.gitlab.postgres.image }}
-  imagePullSecrets:
-    - name: edb-pull-secret
   instances: {{ configuration.gitlab.postgres.instances | default(3) }}
   logLevel: info
   maxSyncReplicas: 0

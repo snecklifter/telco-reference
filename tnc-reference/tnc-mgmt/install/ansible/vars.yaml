@@ -161,6 +161,7 @@ configuration:
       wal_storage_size: "15Gi"
       storage_class: ocs-storagecluster-ceph-rbd
       pull_secret:
+        server: docker.enterprisedb.com
         username: REDACTED
         password: REDACTED
       resources:

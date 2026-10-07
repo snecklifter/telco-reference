@@ -10,6 +10,20 @@
     state: directory
     mode: "0750"
 
+- name: Merge additional registry credentials into pull secret
+  ansible.builtin.set_fact:
+    pull_secret: >-
+      {{ pull_secret | from_json | combine({
+        'auths': (pull_secret | from_json).auths | combine({
+          configuration.gitlab.postgres.pull_secret.server: {
+            'username': configuration.gitlab.postgres.pull_secret.username,
+            'password': configuration.gitlab.postgres.pull_secret.password
+          }
+        })
+      }) | to_json }}
+  no_log: true
+  when: configuration.gitlab.postgres.pull_secret is defined
+
 - name: Generate install-config.yaml
   ansible.builtin.template:
     src: install-config.yaml.j2
