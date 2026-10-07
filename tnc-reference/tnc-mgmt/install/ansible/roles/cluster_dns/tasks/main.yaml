@@ -14,6 +14,12 @@
          | map('regex_replace', '\.zone$', '')
          | list }}
 
+- name: Verify zones were discovered
+  ansible.builtin.assert:
+    that: dns_zones | length > 0
+    fail_msg: "No zone files found in /opt/dns/zones/ — bastion DNS role must run first"
+    success_msg: "Discovered zones: {{ dns_zones | join(', ') }}"
+
 - name: Render cluster DNS manifest
   ansible.builtin.template:
     src: configuration/cluster-dns.yaml.j2

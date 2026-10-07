@@ -10,7 +10,7 @@ metadata:
   name: dns-named-conf
   namespace: dns
 data:
-  named.conf: |
+  hbird-defaults.conf: |
     options {
         directory "/var/named";
         pid-file none;
@@ -109,8 +109,7 @@ spec:
               protocol: TCP
           volumeMounts:
             - name: config
-              mountPath: /etc/named/hbird-defaults.conf
-              subPath: named.conf
+              mountPath: /etc/named
               readOnly: true
             - name: zones
               mountPath: /var/named/zones
@@ -152,8 +151,8 @@ metadata:
   name: dns-udp
   namespace: dns
   annotations:
-    metallb.universe.tf/allow-shared-ip: dns
-    metallb.universe.tf/loadBalancerIPs: {{ networking.dns_vip }}
+    metallb.io/allow-shared-ip: dns
+    metallb.io/loadBalancerIPs: {{ networking.dns_vip }}
 spec:
   type: LoadBalancer
   selector:
@@ -170,8 +169,8 @@ metadata:
   name: dns-tcp
   namespace: dns
   annotations:
-    metallb.universe.tf/allow-shared-ip: dns
-    metallb.universe.tf/loadBalancerIPs: {{ networking.dns_vip }}
+    metallb.io/allow-shared-ip: dns
+    metallb.io/loadBalancerIPs: {{ networking.dns_vip }}
 spec:
   type: LoadBalancer
   selector:
