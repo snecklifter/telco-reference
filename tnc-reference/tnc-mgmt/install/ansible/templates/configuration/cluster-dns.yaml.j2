@@ -109,7 +109,8 @@ spec:
               protocol: TCP
           volumeMounts:
             - name: config
-              mountPath: /etc/named
+              mountPath: /etc/named/hbird-defaults.conf
+              subPath: hbird-defaults.conf
               readOnly: true
             - name: zones
               mountPath: /var/named/zones
@@ -141,6 +142,7 @@ spec:
         - name: config
           configMap:
             name: dns-named-conf
+            defaultMode: 0444
         - name: zones
           configMap:
             name: dns-zones
