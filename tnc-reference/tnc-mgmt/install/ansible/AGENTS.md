@@ -146,6 +146,10 @@ Uses the Red Hat hardened BIND image (`registry.access.redhat.com/hi/bind:latest
 
 Operators with CRs in the kustomize build must be pre-installed in the `storage` role (or before the kustomize apply) so their CRDs exist. Currently pre-installed: LSO, ODF, ACM, CNV, Cluster Logging, Keycloak, DevSpaces. The `stage_config` role fixes `redhat-operators-disconnected` → `configuration.catalog_source` in both `reference-crs/` and `other-crs/`.
 
+**Webhook readiness:** Operators with validating webhooks (ESO, CNPG, and others) will reject CR creation if the webhook has no endpoints yet. Always wait for the operator's controller/webhook deployment to be Available BEFORE creating its CRs. The pattern is: install Subscription → wait for CRD → wait for webhook deployment → create CR. `oc wait --for=condition=Available deployment/<name>` fails immediately if the deployment doesn't exist, so add a retry loop to wait for it to appear first (same pattern as ArgoCD, cert-manager).
+
+**Deployment existence:** `oc wait` fails with "not found" if the deployment hasn't been created yet (operator still reconciling). Always add a separate retry task to wait for the deployment to exist before running `oc wait --for=condition`.
+
 ### OpenShift Routes (not GatewayAPI)
 
 External access for Vault and GitLab uses OpenShift Routes with edge TLS termination. GatewayAPI is not used because OpenShift 4.22 system components (console, OAuth, monitoring) only support Routes — there is no migration path to HTTPRoutes for system components yet.
