@@ -8,6 +8,25 @@ spec:
   affinity:
     podAntiAffinityType: preferred
   backup:
+    barmanObjectStore:
+      data:
+        compression: gzip
+        encryption: AES256
+        immediateCheckpoint: false
+        jobs: 2
+      destinationPath: s3://gitlab-edb-backup/
+      endpointURL: {{ noobaa_s3_endpoint }}
+      s3Credentials:
+        accessKeyId:
+          key: ACCESS_KEY_ID
+          name: cnpg-s3-backup-creds
+        secretAccessKey:
+          key: SECRET_ACCESS_KEY
+          name: cnpg-s3-backup-creds
+      wal:
+        compression: gzip
+        encryption: AES256
+    retentionPolicy: "30d"
     target: prefer-standby
     volumeSnapshot:
       online: true
@@ -58,10 +77,10 @@ spec:
       logging_collector: "on"
       max_connections: "400"
       max_locks_per_transaction: "256"
-      max_parallel_workers: "32"
+      max_parallel_workers: "8"
       max_replication_slots: "32"
       max_slot_wal_keep_size: "-1"
-      max_worker_processes: "32"
+      max_worker_processes: "8"
       shared_buffers: 2GB
       shared_memory_type: mmap
       ssl_max_protocol_version: TLSv1.3
@@ -108,3 +127,40 @@ spec:
     resizeInUseVolumes: true
     size: {{ configuration.gitlab.postgres.wal_storage_size | default("15Gi") }}
     storageClass: {{ configuration.gitlab.postgres.storage_class }}
+---
+apiVersion: postgresql.k8s.enterprisedb.io/v1
+kind: ScheduledBackup
+metadata:
+  name: gitlab-daily-backup
+  namespace: gitlab-system
+spec:
+  backupOwnerReference: self
+  cluster:
+    name: gitlab-postgres
+  immediate: true
+  schedule: "0 0 3 * * *"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cnpg-s3-backup-access
+  namespace: gitlab-system
+rules:
+  - apiGroups: [""]
+    resourceNames: [cnpg-s3-backup-creds]
+    resources: [secrets]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cnpg-s3-backup-access
+  namespace: gitlab-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cnpg-s3-backup-access
+subjects:
+  - kind: ServiceAccount
+    name: gitlab-postgres
+    namespace: gitlab-system

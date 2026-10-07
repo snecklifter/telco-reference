@@ -7,8 +7,6 @@
   loop:
     - src: keycloak-namespace.yaml.j2
       dest: keycloak-namespace.yaml
-    - src: keycloak-cnpg-cluster.yaml.j2
-      dest: keycloak-cnpg-cluster.yaml
     - src: keycloak-cr.yaml.j2
       dest: keycloak-cr.yaml
     - src: keycloak-route.yaml.j2
@@ -54,6 +52,45 @@
   changed_when: false
 
 # --- CNPG PostgreSQL for Keycloak ---
+
+- name: Read NooBaa account credentials for backups
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-storage get secret noobaa-account-gitlab -o json
+  register: noobaa_secret_json
+  no_log: true
+
+- name: Set NooBaa credentials
+  ansible.builtin.set_fact:
+    noobaa_access_key: "{{ (noobaa_secret_json.stdout | from_json).data.AWS_ACCESS_KEY_ID | b64decode }}"
+    noobaa_secret_key: "{{ (noobaa_secret_json.stdout | from_json).data.AWS_SECRET_ACCESS_KEY | b64decode }}"
+  no_log: true
+
+- name: Get NooBaa S3 endpoint
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-storage get route s3 -o jsonpath='{.spec.host}'
+  register: noobaa_s3_route
+
+- name: Set NooBaa S3 endpoint
+  ansible.builtin.set_fact:
+    noobaa_s3_endpoint: "https://{{ noobaa_s3_route.stdout }}"
+
+- name: Create CNPG S3 backup credentials in keycloak
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n keycloak create secret generic cnpg-s3-backup-creds
+    --from-literal=ACCESS_KEY_ID={{ noobaa_access_key }}
+    --from-literal=SECRET_ACCESS_KEY={{ noobaa_secret_key }}
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  no_log: true
+
+- name: Render Keycloak CNPG cluster manifest
+  ansible.builtin.template:
+    src: configuration/keycloak-cnpg-cluster.yaml.j2
+    dest: "{{ config_stage_dir }}/keycloak-cnpg-cluster.yaml"
+    mode: "0644"
 
 - name: Deploy CNPG PostgreSQL cluster for Keycloak
   ansible.builtin.command: >

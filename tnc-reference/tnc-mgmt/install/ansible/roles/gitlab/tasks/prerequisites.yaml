@@ -81,6 +81,8 @@
         'gitlab-backup-storage',
         'gitlab-tmp-storage',
         'gitlab-registry-storage',
+        'gitlab-edb-backup',
+        'keycloak-edb-backup',
     ]
     for bucket in buckets:
         try:
@@ -215,6 +217,22 @@
 
 
 # --- PostgreSQL (CNPG) and Redis ---
+
+- name: Render GitLab CNPG cluster manifest
+  ansible.builtin.template:
+    src: configuration/gitlab-cnpg-cluster.yaml.j2
+    dest: "{{ config_stage_dir }}/gitlab-cnpg-cluster.yaml"
+    mode: "0644"
+
+- name: Create CNPG S3 backup credentials in gitlab-system
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n gitlab-system create secret generic cnpg-s3-backup-creds
+    --from-literal=ACCESS_KEY_ID={{ noobaa_access_key }}
+    --from-literal=SECRET_ACCESS_KEY={{ noobaa_secret_key }}
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  no_log: true
 
 - name: Deploy CNPG PostgreSQL cluster
   ansible.builtin.command: >
