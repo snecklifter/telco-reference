@@ -45,6 +45,7 @@
   roles:
     - stage_config
     - storage
+    - cluster_dns
     - vault
     - certmanager
     - keycloak

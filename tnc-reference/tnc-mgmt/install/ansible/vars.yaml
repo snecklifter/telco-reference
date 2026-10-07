@@ -11,6 +11,8 @@ networking:
   service_network_cidr: 172.30.0.0/16
   api_vip: 172.31.61.4
   ingress_vip: 172.31.61.5
+  dns_vip: 172.31.61.6
+  metallb_pool: 172.31.61.6-172.31.61.8
 
   mtu: 8950
   bond_mode: "802.3ad"

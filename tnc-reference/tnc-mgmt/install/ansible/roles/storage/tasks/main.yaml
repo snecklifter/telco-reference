@@ -1,4 +1,59 @@
 ---
+# --- MetalLB ---
+
+- name: Render MetalLB manifests
+  ansible.builtin.template:
+    src: "configuration/{{ item.src }}"
+    dest: "{{ config_stage_dir }}/{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - src: metallb.yaml.j2
+      dest: metallb.yaml
+    - src: metallb-config.yaml.j2
+      dest: metallb-config.yaml
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Install MetalLB operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/metallb.yaml
+
+- name: Wait for MetalLB operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n metallb-system get subscriptions.operators.coreos.com
+    metallb-operator -o jsonpath='{.status.state}'
+  register: metallb_state
+  until: metallb_state.stdout == "AtLatestKnown"
+  retries: 30
+  delay: 20
+  changed_when: false
+
+- name: Wait for MetalLB CRD
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    get crd metallbs.metallb.io
+  register: metallb_crd
+  until: metallb_crd.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Create MetalLB instance and address pool
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/metallb-config.yaml
+
+- name: Wait for MetalLB controller
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n metallb-system wait --for=condition=Available
+    deployment/controller --timeout=300s
+  changed_when: false
+
+# --- LSO ---
+
 - name: Install LSO operator
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }} apply

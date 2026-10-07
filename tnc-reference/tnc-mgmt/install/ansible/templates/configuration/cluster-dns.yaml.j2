@@ -1,0 +1,187 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dns
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dns-config
+  namespace: dns
+data:
+  named.conf: |
+    options {
+        directory "/var/named";
+        pid-file none;
+        session-keyfile none;
+
+        listen-on port 8053 { any; };
+        listen-on-v6 port 8053 { none; };
+
+        recursion yes;
+        allow-recursion { any; };
+        dnssec-validation no;
+        minimal-any yes;
+        max-cache-size 128m;
+
+        forwarders {
+    {% for fwd in networking.dns_forwarders | default(['8.8.8.8', '8.8.4.4']) %}
+            {{ fwd }};
+    {% endfor %}
+        };
+        forward only;
+    };
+
+    controls { };
+
+    {% for zone in dns_zones %}
+    zone "{{ zone }}" IN {
+        type primary;
+        file "/var/named/zones/{{ zone }}.zone";
+    };
+
+    {% endfor %}
+{% for zone in dns_zones %}
+  {{ zone }}.zone: |
+    $TTL 86400
+    @   IN  SOA ns1.{{ zone }}. admin.{{ zone }}. (
+                {{ ansible_date_time.epoch }}  ; serial
+                3600        ; refresh
+                1800        ; retry
+                604800      ; expire
+                86400       ; minimum TTL
+            )
+    @       IN  NS  ns1
+    ns1     IN  A   {{ networking.dns_vip }}
+{% if zone == cluster.name + '.' + cluster.base_domain %}
+
+    api     IN  A   {{ networking.api_vip }}
+    api-int IN  A   {{ networking.api_vip }}
+    *.apps  IN  A   {{ networking.ingress_vip }}
+
+    {% for host in hosts %}
+    {{ host.hostname }}    IN  A   {{ host.ip }}
+    {% endfor %}
+{% endif %}
+{% endfor %}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-server
+  namespace: dns
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: dns-server
+  template:
+    metadata:
+      labels:
+        app: dns-server
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - dns-server
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: bind
+          image: registry.access.redhat.com/hi/bind:latest
+          ports:
+            - name: dns-udp
+              containerPort: 8053
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: 8053
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/named/hbird-defaults.conf
+              subPath: named.conf
+              readOnly: true
+            - name: zones
+              mountPath: /var/named/zones
+              readOnly: true
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "dig +short @127.0.0.1 -p 8053 version.bind txt chaos | grep -q ."
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "dig +short @127.0.0.1 -p 8053 version.bind txt chaos | grep -q ."
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+      volumes:
+        - name: config
+          configMap:
+            name: dns-config
+            items:
+              - key: named.conf
+                path: named.conf
+        - name: zones
+          configMap:
+            name: dns-config
+            items:
+{% for zone in dns_zones %}
+              - key: {{ zone }}.zone
+                path: {{ zone }}.zone
+{% endfor %}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dns-udp
+  namespace: dns
+  annotations:
+    metallb.universe.tf/allow-shared-ip: dns
+    metallb.universe.tf/loadBalancerIPs: {{ networking.dns_vip }}
+spec:
+  type: LoadBalancer
+  selector:
+    app: dns-server
+  ports:
+    - name: dns-udp
+      port: 53
+      targetPort: 8053
+      protocol: UDP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dns-tcp
+  namespace: dns
+  annotations:
+    metallb.universe.tf/allow-shared-ip: dns
+    metallb.universe.tf/loadBalancerIPs: {{ networking.dns_vip }}
+spec:
+  type: LoadBalancer
+  selector:
+    app: dns-server
+  ports:
+    - name: dns-tcp
+      port: 53
+      targetPort: 8053
+      protocol: TCP

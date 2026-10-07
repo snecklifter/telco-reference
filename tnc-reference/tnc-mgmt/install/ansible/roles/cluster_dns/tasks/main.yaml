@@ -1,0 +1,59 @@
+---
+- name: Discover all zone files from bastion DNS
+  ansible.builtin.find:
+    paths: /opt/dns/zones
+    patterns: "*.zone"
+  register: zone_files_found
+
+- name: Build zone list from discovered files
+  ansible.builtin.set_fact:
+    dns_zones: >-
+      {{ zone_files_found.files
+         | map(attribute='path')
+         | map('basename')
+         | map('regex_replace', '\.zone$', '')
+         | list }}
+
+- name: Render cluster DNS manifest
+  ansible.builtin.template:
+    src: configuration/cluster-dns.yaml.j2
+    dest: "{{ config_stage_dir }}/cluster-dns.yaml"
+    mode: "0644"
+
+- name: Deploy cluster DNS
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/cluster-dns.yaml
+
+- name: Wait for DNS deployment to be ready
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n dns wait --for=condition=Available
+    deployment/dns-server --timeout=300s
+  changed_when: false
+
+- name: Wait for DNS LoadBalancer IP assignment
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n dns get service dns-udp
+    -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+  register: dns_lb_ip
+  until: dns_lb_ip.stdout | length > 0
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Verify cluster DNS resolves api record
+  ansible.builtin.command: >
+    dig +short api.{{ cluster.name }}.{{ cluster.base_domain }}
+    @{{ networking.dns_vip }}
+  register: cluster_dns_check
+  changed_when: false
+  failed_when: networking.api_vip not in cluster_dns_check.stdout
+
+- name: Cluster DNS ready
+  ansible.builtin.debug:
+    msg:
+      - "Cluster DNS: {{ networking.dns_vip }}"
+      - "Zones: {{ dns_zones | join(', ') }}"
+      - "Replicas: 3 (anti-affinity across workers)"
