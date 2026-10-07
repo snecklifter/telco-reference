@@ -132,6 +132,25 @@
   delay: 30
   changed_when: false
 
-- name: Wildcard certificate ready
+- name: Wait for API certificate to be issued
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-config get certificate api-cert
+    -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+  register: api_cert_ready
+  until: api_cert_ready.stdout == "True"
+  retries: 60
+  delay: 30
+  changed_when: false
+
+- name: Set API server certificate
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    patch apiserver cluster --type merge
+    -p '{"spec":{"servingCerts":{"namedCertificates":[{"names":["api.{{ cluster.name }}.{{ cluster.base_domain }}"],"servingCertificate":{"name":"api-cert"}}]}}}'
+
+- name: Certificates ready
   ansible.builtin.debug:
-    msg: "Wildcard TLS certificate issued for *.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
+    msg:
+      - "Wildcard TLS: *.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
+      - "API TLS: api.{{ cluster.name }}.{{ cluster.base_domain }}"

@@ -18,6 +18,25 @@ spec:
     size: 256
   secretName: ingress-wildcard-cert
 ---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: api-cert
+  namespace: openshift-config
+spec:
+  commonName: "api.{{ cluster.name }}.{{ cluster.base_domain }}"
+  dnsNames:
+    - "api.{{ cluster.name }}.{{ cluster.base_domain }}"
+  isCA: false
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: letsencrypt-production
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  secretName: api-cert
+---
 apiVersion: operator.openshift.io/v1
 kind: IngressController
 metadata:
