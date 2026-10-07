@@ -97,24 +97,17 @@ spec:
                       values:
                         - dns-server
                 topologyKey: kubernetes.io/hostname
+      securityContext:
+        fsGroup: 0
       initContainers:
         - name: copy-config
           image: registry.access.redhat.com/ubi9/ubi-micro:latest
-          command: ['sh', '-c', 'cp /config-source/hbird-defaults.conf /config/hbird-defaults.conf && chmod 755 /config && chmod 444 /config/hbird-defaults.conf']
+          command: ['cp', '/config-source/hbird-defaults.conf', '/config/hbird-defaults.conf']
           volumeMounts:
             - name: config-source
               mountPath: /config-source
             - name: config
               mountPath: /config
-        - name: debug-perms
-          image: registry.access.redhat.com/hi/bind:latest
-          command: ['sh', '-c', 'echo "=== UID ===" && id && echo "=== /etc/named/ ===" && ls -la /etc/named/ && echo "=== cat test ===" && cat /etc/named/hbird-defaults.conf | head -3 && echo "=== SUCCESS ==="']
-          volumeMounts:
-            - name: config
-              mountPath: /etc/named
-            - name: zones
-              mountPath: /var/named/zones
-              readOnly: true
       containers:
         - name: bind
           image: registry.access.redhat.com/hi/bind:latest
