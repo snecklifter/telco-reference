@@ -118,9 +118,7 @@ spec:
               protocol: TCP
           volumeMounts:
             - name: config
-              mountPath: /etc/named/hbird-defaults.conf
-              subPath: hbird-defaults.conf
-              readOnly: true
+              mountPath: /etc/named
             - name: zones
               mountPath: /var/named/zones
               readOnly: true
