@@ -39,14 +39,24 @@
     - clusterissuers.cert-manager.io
     - certificates.cert-manager.io
 
-- name: Wait for cert-manager controller
+- name: Wait for cert-manager controller deployment to exist
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n cert-manager get deployment cert-manager
+  register: cm_deploy
+  until: cm_deploy.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Wait for cert-manager controller to be ready
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
     -n cert-manager wait --for=condition=Available
     deployment/cert-manager --timeout=300s
   changed_when: false
 
-- name: Wait for cert-manager webhook
+- name: Wait for cert-manager webhook to be ready
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
     -n cert-manager wait --for=condition=Available
