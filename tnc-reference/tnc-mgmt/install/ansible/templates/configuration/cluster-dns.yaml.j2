@@ -7,7 +7,7 @@ metadata:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: dns-config
+  name: dns-named-conf
   namespace: dns
 data:
   named.conf: |
@@ -26,22 +26,28 @@ data:
         max-cache-size 128m;
 
         forwarders {
-    {% for fwd in networking.dns_forwarders | default(['8.8.8.8', '8.8.4.4']) %}
+{% for fwd in networking.dns_forwarders | default(['8.8.8.8', '8.8.4.4']) %}
             {{ fwd }};
-    {% endfor %}
+{% endfor %}
         };
         forward only;
     };
 
     controls { };
 
-    {% for zone in dns_zones %}
+{% for zone in dns_zones %}
     zone "{{ zone }}" IN {
         type primary;
         file "/var/named/zones/{{ zone }}.zone";
     };
-
-    {% endfor %}
+{% endfor %}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dns-zones
+  namespace: dns
+data:
 {% for zone in dns_zones %}
   {{ zone }}.zone: |
     $TTL 86400
@@ -55,14 +61,12 @@ data:
     @       IN  NS  ns1
     ns1     IN  A   {{ networking.dns_vip }}
 {% if zone == cluster.name + '.' + cluster.base_domain %}
-
     api     IN  A   {{ networking.api_vip }}
     api-int IN  A   {{ networking.api_vip }}
     *.apps  IN  A   {{ networking.ingress_vip }}
-
-    {% for host in hosts %}
+{% for host in hosts %}
     {{ host.hostname }}    IN  A   {{ host.ip }}
-    {% endfor %}
+{% endfor %}
 {% endif %}
 {% endfor %}
 ---
@@ -137,18 +141,10 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: dns-config
-            items:
-              - key: named.conf
-                path: named.conf
+            name: dns-named-conf
         - name: zones
           configMap:
-            name: dns-config
-            items:
-{% for zone in dns_zones %}
-              - key: {{ zone }}.zone
-                path: {{ zone }}.zone
-{% endfor %}
+            name: dns-zones
 ---
 apiVersion: v1
 kind: Service
