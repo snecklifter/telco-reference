@@ -143,6 +143,16 @@ configuration:
       group_name: REDACTED
       solver_name: REDACTED
 
+  # Keycloak (RHBK) — SSO for OpenShift, GitLab, and platform services.
+  # Deployed before GitLab so OIDC clients are available at GitLab startup.
+  keycloak:
+    replicas: 2
+    postgres:
+      instances: 3
+      storage_size: "10Gi"
+      wal_storage_size: "5Gi"
+      storage_class: ocs-storagecluster-ceph-rbd
+
   # GitLab instance deployed on this cluster (before ArgoCD, needs ODF)
   # Chart version must match the gitlab-operator version — check with:
   #   oc -n gitlab-system get csv -o jsonpath='{.items[0].spec.version}'
@@ -153,7 +163,7 @@ configuration:
     replicas: 3
     pages_subdomain: docs
     registry_enabled: false
-    keycloak_enabled: false
+    keycloak_enabled: true
     postgres:
       image: docker.enterprisedb.com/k8s/postgresql:18-standard-ubi9
       instances: 3

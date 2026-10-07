@@ -1,0 +1,69 @@
+---
+apiVersion: postgresql.k8s.enterprisedb.io/v1
+kind: Cluster
+metadata:
+  name: keycloak-postgres
+  namespace: keycloak
+spec:
+  affinity:
+    podAntiAffinityType: preferred
+  bootstrap:
+    initdb:
+      database: keycloak
+      encoding: UTF8
+      localeCType: C
+      localeCollate: C
+      owner: keycloak
+      secret:
+        name: keycloak-postgres-creds
+  enablePDB: true
+  enableSuperuserAccess: false
+  imageName: {{ configuration.gitlab.postgres.image }}
+  instances: {{ configuration.keycloak.postgres.instances | default(3) }}
+  logLevel: info
+  monitoring:
+    disableDefaultQueries: false
+    enablePodMonitor: true
+  postgresGID: 26
+  postgresql:
+    parameters:
+      archive_mode: "on"
+      archive_timeout: 5min
+      dynamic_shared_memory_type: posix
+      log_destination: csvlog
+      log_directory: /controller/log
+      log_filename: postgres
+      logging_collector: "on"
+      max_connections: "200"
+      shared_buffers: 256MB
+      shared_memory_type: mmap
+      ssl_max_protocol_version: TLSv1.3
+      ssl_min_protocol_version: TLSv1.3
+      wal_keep_size: 256MB
+      wal_level: logical
+    syncReplicaElectionConstraint:
+      enabled: false
+  postgresUID: 26
+  primaryUpdateMethod: restart
+  primaryUpdateStrategy: unsupervised
+  replicationSlots:
+    highAvailability:
+      enabled: true
+      slotPrefix: _cnp_
+    synchronizeReplicas:
+      enabled: true
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "2Gi"
+    requests:
+      cpu: "250m"
+      memory: "1Gi"
+  storage:
+    resizeInUseVolumes: true
+    size: {{ configuration.keycloak.postgres.storage_size | default("10Gi") }}
+    storageClass: {{ configuration.keycloak.postgres.storage_class | default(configuration.odf.default_storage_class) }}
+  walStorage:
+    resizeInUseVolumes: true
+    size: {{ configuration.keycloak.postgres.wal_storage_size | default("5Gi") }}
+    storageClass: {{ configuration.keycloak.postgres.storage_class | default(configuration.odf.default_storage_class) }}

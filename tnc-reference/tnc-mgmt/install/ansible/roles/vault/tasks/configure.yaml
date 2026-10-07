@@ -106,6 +106,51 @@
   no_log: true
   when: vault_redis_check.rc != 0
 
+- name: Check if Keycloak secrets exist in Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }} vault kv get -format=json {{ configuration.vault.secret_path }}/keycloak/postgres'
+  register: vault_keycloak_check
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Generate and write Keycloak database credentials to Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv put {{ configuration.vault.secret_path }}/keycloak/postgres
+    username=keycloak
+    password={{ lookup("ansible.builtin.password", "/dev/null length=24 chars=ascii_letters,digits") }}'
+  no_log: true
+  when: vault_keycloak_check.rc != 0
+
+- name: Generate and write Keycloak admin credentials to Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv put {{ configuration.vault.secret_path }}/keycloak/admin
+    username=admin
+    password={{ lookup("ansible.builtin.password", "/dev/null length=24 chars=ascii_letters,digits") }}'
+  no_log: true
+  when: vault_keycloak_check.rc != 0
+
+- name: Generate and write Keycloak OIDC client secrets to Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv put {{ configuration.vault.secret_path }}/keycloak/clients/{{ item }}
+    secret={{ lookup("ansible.builtin.password", "/dev/null length=32 chars=ascii_letters,digits") }}'
+  loop:
+    - openshift
+    - gitlab
+  no_log: true
+  when: vault_keycloak_check.rc != 0
+
 - name: Write DNS API credentials to Vault
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}

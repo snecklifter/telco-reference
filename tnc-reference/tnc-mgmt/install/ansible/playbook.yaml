@@ -47,5 +47,6 @@
     - storage
     - vault
     - certmanager
+    - keycloak
     - gitlab
     - gitops

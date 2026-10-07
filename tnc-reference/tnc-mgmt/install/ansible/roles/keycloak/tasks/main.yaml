@@ -1,0 +1,186 @@
+---
+- name: Render Keycloak manifests
+  ansible.builtin.template:
+    src: "configuration/{{ item.src }}"
+    dest: "{{ config_stage_dir }}/{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - src: keycloak-namespace.yaml.j2
+      dest: keycloak-namespace.yaml
+    - src: keycloak-cnpg-cluster.yaml.j2
+      dest: keycloak-cnpg-cluster.yaml
+    - src: keycloak-cr.yaml.j2
+      dest: keycloak-cr.yaml
+    - src: keycloak-route.yaml.j2
+      dest: keycloak-route.yaml
+    - src: keycloak-external-secrets.yaml.j2
+      dest: keycloak-external-secrets.yaml
+    - src: openshift-oauth.yaml.j2
+      dest: openshift-oauth.yaml
+  loop_control:
+    label: "{{ item.dest }}"
+
+- name: Create Keycloak namespace
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/keycloak-namespace.yaml
+
+- name: Apply Keycloak ExternalSecrets
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/keycloak-external-secrets.yaml
+
+- name: Wait for Keycloak secrets to sync from Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n keycloak get secret {{ item }}
+  register: kc_secret_check
+  until: kc_secret_check.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+  loop:
+    - keycloak-postgres-creds
+    - keycloak-admin-secret
+
+- name: Wait for OpenShift client secret to sync
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-config get secret keycloak-openshift-client-secret
+  register: ocp_secret_check
+  until: ocp_secret_check.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+
+# --- CNPG PostgreSQL for Keycloak ---
+
+- name: Deploy CNPG PostgreSQL cluster for Keycloak
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/keycloak-cnpg-cluster.yaml
+
+- name: Wait for Keycloak CNPG cluster to be ready
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n keycloak get clusters.postgresql.k8s.enterprisedb.io keycloak-postgres
+    -o jsonpath='{.status.phase}'
+  register: kc_cnpg_phase
+  until: kc_cnpg_phase.stdout == "Cluster in healthy state"
+  retries: 60
+  delay: 15
+  changed_when: false
+
+# --- Keycloak instance ---
+
+- name: Deploy Keycloak
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/keycloak-cr.yaml
+
+- name: Create Keycloak Route
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/keycloak-route.yaml
+
+- name: Wait for Keycloak to be ready
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n keycloak get keycloak keycloak
+    -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+  register: kc_ready
+  until: kc_ready.stdout == "true" or kc_ready.stdout == "True"
+  retries: 60
+  delay: 15
+  changed_when: false
+
+# --- Realm with OIDC clients ---
+
+- name: Read OpenShift OIDC client secret from Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv get -field=secret {{ configuration.vault.secret_path }}/keycloak/clients/openshift'
+  register: vault_openshift_secret
+  no_log: true
+
+- name: Read GitLab OIDC client secret from Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv get -field=secret {{ configuration.vault.secret_path }}/keycloak/clients/gitlab'
+  register: vault_gitlab_secret
+  no_log: true
+
+- name: Render and apply Keycloak realm import
+  ansible.builtin.template:
+    src: configuration/keycloak-realm-import.yaml.j2
+    dest: "{{ config_stage_dir }}/keycloak-realm-import.yaml"
+    mode: "0640"
+  vars:
+    keycloak_openshift_client_secret: "{{ vault_openshift_secret.stdout }}"
+    keycloak_gitlab_client_secret: "{{ vault_gitlab_secret.stdout }}"
+  no_log: true
+
+- name: Apply Keycloak realm import
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/keycloak-realm-import.yaml
+
+- name: Wait for realm import to complete
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n keycloak get keycloakrealmimport openshift-realm
+    -o jsonpath='{.status.conditions[?(@.type=="Done")].status}'
+  register: realm_import
+  until: realm_import.stdout == "true" or realm_import.stdout == "True"
+  retries: 30
+  delay: 10
+  changed_when: false
+
+# --- GitLab OIDC provider secret ---
+
+- name: Create GitLab Keycloak OIDC provider secret
+  ansible.builtin.shell: |
+    oc --kubeconfig {{ kubeconfig_path }} \
+      -n gitlab-system create secret generic gitlab-keycloak \
+      --from-literal=provider='{{ gitlab_oidc_provider | to_json }}' \
+      --dry-run=client -o yaml | \
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  vars:
+    gitlab_oidc_provider:
+      name: openid_connect
+      label: Keycloak
+      args:
+        name: openid_connect
+        scope:
+          - openid
+          - profile
+          - email
+        response_type: code
+        issuer: "https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/openshift"
+        discovery: true
+        client_auth_method: query
+        uid_field: preferred_username
+        client_options:
+          identifier: gitlab
+          secret: "{{ vault_gitlab_secret.stdout }}"
+          redirect_uri: "https://gitlab.apps.{{ cluster.name }}.{{ cluster.base_domain }}/users/auth/openid_connect/callback"
+  no_log: true
+
+# --- OpenShift OAuth ---
+
+- name: Configure OpenShift OAuth with Keycloak
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/openshift-oauth.yaml
+
+- name: Keycloak ready
+  ansible.builtin.debug:
+    msg:
+      - "Keycloak: https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
+      - "Realm: openshift"
+      - "OpenShift OAuth: configured"
+      - "GitLab OIDC: configured"
