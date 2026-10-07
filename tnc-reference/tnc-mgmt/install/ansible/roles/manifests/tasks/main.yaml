@@ -16,6 +16,29 @@
     dest: "{{ build_dir }}/install-config.yaml"
     mode: "0640"
 
+- name: Back up install-config.yaml
+  ansible.builtin.copy:
+    src: "{{ build_dir }}/install-config.yaml"
+    dest: "{{ build_dir }}/install-config.yaml.bak"
+    mode: "0640"
+    remote_src: true
+
+- name: Verify pull secret contains all required registries
+  ansible.builtin.shell: |
+    python3 -c "
+    import yaml, json, sys
+    ic = yaml.safe_load(open('{{ build_dir }}/install-config.yaml'))
+    auths = json.loads(ic['pullSecret']).get('auths', {})
+    registries = list(auths.keys())
+    print('Registries in pull secret: ' + ', '.join(registries))
+    {% if configuration.gitlab.postgres.pull_secret is defined %}
+    if '{{ configuration.gitlab.postgres.pull_secret.server }}' not in auths:
+        print('MISSING: {{ configuration.gitlab.postgres.pull_secret.server }}')
+        sys.exit(1)
+    {% endif %}
+    "
+  changed_when: false
+
 - name: Generate agent-config.yaml
   ansible.builtin.template:
     src: agent-config.yaml.j2
