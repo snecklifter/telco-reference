@@ -100,7 +100,7 @@ spec:
       initContainers:
         - name: copy-config
           image: registry.access.redhat.com/ubi9/ubi-micro:latest
-          command: ['sh', '-c', 'cp /config-source/hbird-defaults.conf /config/hbird-defaults.conf']
+          command: ['sh', '-c', 'cp /config-source/hbird-defaults.conf /config/hbird-defaults.conf && chmod 755 /config && chmod 444 /config/hbird-defaults.conf']
           volumeMounts:
             - name: config-source
               mountPath: /config-source
