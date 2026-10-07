@@ -213,6 +213,17 @@
   delay: 10
   changed_when: false
 
+- name: Wait for ESO webhook to be ready
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n external-secrets wait --for=condition=Available
+    deployment/external-secrets-webhook --timeout=300s
+  register: eso_webhook
+  until: eso_webhook.rc == 0
+  retries: 10
+  delay: 15
+  changed_when: false
+
 - name: Create ClusterSecretStore for Vault
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
