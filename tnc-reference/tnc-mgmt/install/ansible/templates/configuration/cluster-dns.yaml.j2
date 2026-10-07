@@ -97,6 +97,15 @@ spec:
                       values:
                         - dns-server
                 topologyKey: kubernetes.io/hostname
+      initContainers:
+        - name: copy-config
+          image: registry.access.redhat.com/ubi9/ubi-micro:latest
+          command: ['sh', '-c', 'cp /config-source/hbird-defaults.conf /config/hbird-defaults.conf']
+          volumeMounts:
+            - name: config-source
+              mountPath: /config-source
+            - name: config
+              mountPath: /config
       containers:
         - name: bind
           image: registry.access.redhat.com/hi/bind:latest
@@ -139,13 +148,16 @@ spec:
               cpu: "100m"
               memory: "128Mi"
       volumes:
-        - name: config
+        - name: config-source
           configMap:
             name: dns-named-conf
             defaultMode: 0444
+        - name: config
+          emptyDir: {}
         - name: zones
           configMap:
             name: dns-zones
+            defaultMode: 0444
 ---
 apiVersion: v1
 kind: Service
