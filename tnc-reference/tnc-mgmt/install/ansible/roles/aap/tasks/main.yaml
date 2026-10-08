@@ -75,12 +75,11 @@
   ansible.builtin.shell: >
     oc --kubeconfig {{ kubeconfig_path }}
     -n aap create secret generic {{ item.name }}
-    --from-literal=host=aap-postgres-rw.aap.svc.cluster.local
+    --from-literal=host=aap-postgres-rw
     --from-literal=port=5432
     --from-literal=database={{ item.database }}
     --from-literal=username={{ aap_db_username }}
     --from-literal=password={{ aap_db_password }}
-    --from-literal=sslmode=prefer
     --from-literal=type=unmanaged
     --dry-run=client -o yaml |
     oc --kubeconfig {{ kubeconfig_path }} apply -f -
