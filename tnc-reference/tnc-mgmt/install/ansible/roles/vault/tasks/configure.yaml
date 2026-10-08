@@ -138,19 +138,33 @@
   no_log: true
   when: vault_keycloak_check.rc != 0
 
-- name: Generate and write Keycloak OIDC client secrets to Vault
+- name: Check if OIDC client secrets exist in Vault
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
     -n vault exec vault-0 --
     sh -c 'VAULT_TOKEN={{ vault_root_token }}
-    vault kv put {{ configuration.vault.secret_path }}/keycloak/clients/{{ item }}
-    secret={{ lookup("ansible.builtin.password", "/dev/null length=32 chars=ascii_letters,digits") }}'
+    vault kv get -format=json {{ configuration.vault.secret_path }}/keycloak/clients/{{ item }}'
   loop:
     - openshift
     - gitlab
     - netbox
+  register: vault_client_checks
+  failed_when: false
+  changed_when: false
   no_log: true
-  when: vault_keycloak_check.rc != 0
+
+- name: Generate missing OIDC client secrets in Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv put {{ configuration.vault.secret_path }}/keycloak/clients/{{ item.item }}
+    secret={{ lookup("ansible.builtin.password", "/dev/null length=32 chars=ascii_letters,digits") }}'
+  loop: "{{ vault_client_checks.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  no_log: true
+  when: item.rc != 0
 
 - name: Check if NetBox secrets exist in Vault
   ansible.builtin.command: >
