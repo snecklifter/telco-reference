@@ -77,8 +77,8 @@
     -n aap create secret generic {{ item.name }}
     --from-literal=host=aap-postgres-rw.aap.svc.cluster.local
     --from-literal=port=5432
-    --from-literal=dbname={{ item.database }}
-    --from-literal=user={{ aap_db_username }}
+    --from-literal=database={{ item.database }}
+    --from-literal=username={{ aap_db_username }}
     --from-literal=password={{ aap_db_password }}
     --from-literal=sslmode=prefer
     --from-literal=type=unmanaged
