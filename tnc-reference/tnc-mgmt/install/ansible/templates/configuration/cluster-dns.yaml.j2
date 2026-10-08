@@ -100,7 +100,17 @@ spec:
       initContainers:
         - name: copy-config
           image: registry.access.redhat.com/ubi9/ubi-minimal:latest
-          command: ['sh', '-c', 'cp /config-source/hbird-defaults.conf /config/ && cp /zones-source/*.zone /zones/']
+          command:
+            - sh
+            - -c
+            - |
+              echo "=== Init UID ===" && id
+              echo "=== Config source ===" && ls -la /config-source/
+              cp /config-source/hbird-defaults.conf /config/
+              echo "=== Config dest ===" && ls -la /config/
+              echo "=== Zones source ===" && ls -la /zones-source/
+              cp /zones-source/*.zone /zones/
+              echo "=== Zones dest ===" && ls -la /zones/
           volumeMounts:
             - name: config-source
               mountPath: /config-source
