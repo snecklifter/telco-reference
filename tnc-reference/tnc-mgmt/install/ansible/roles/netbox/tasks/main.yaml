@@ -1,4 +1,8 @@
 ---
+- name: Skip NetBox role if not in components
+  ansible.builtin.meta: end_host
+  when: "'netbox' not in configuration.components"
+
 - name: Create NetBox namespace
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}

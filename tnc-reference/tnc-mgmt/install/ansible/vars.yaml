@@ -109,6 +109,7 @@ configuration:
     - logging
     - cnv
     - keycloak
+    - netbox
     - devspaces
     # - registry        # disconnected only
     # - kafka
