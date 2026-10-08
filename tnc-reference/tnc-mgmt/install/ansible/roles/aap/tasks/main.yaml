@@ -85,6 +85,8 @@
     --dry-run=client -o yaml |
     oc --kubeconfig {{ kubeconfig_path }} apply -f -
   loop:
+    - name: aap-gateway-db
+      database: awx
     - name: aap-controller-db
       database: automationcontroller
     - name: aap-hub-db
