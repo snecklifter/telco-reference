@@ -149,8 +149,30 @@
     patch apiserver cluster --type merge
     -p '{"spec":{"servingCerts":{"namedCertificates":[{"names":["api.{{ cluster.name }}.{{ cluster.base_domain }}"],"servingCertificate":{"name":"api-cert"}}]}}}'
 
+- name: Update kubeconfig to trust Let's Encrypt API certificate
+  ansible.builtin.shell: |
+    python3 -c "
+    import yaml
+    with open('{{ kubeconfig_path }}') as f:
+        kc = yaml.safe_load(f)
+    for cluster in kc.get('clusters', []):
+        cluster.get('cluster', {}).pop('certificate-authority-data', None)
+    with open('{{ kubeconfig_path }}', 'w') as f:
+        yaml.dump(kc, f, default_flow_style=False)
+    "
+
+- name: Verify API access with updated kubeconfig
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }} get nodes
+  register: api_verify
+  retries: 10
+  delay: 30
+  until: api_verify.rc == 0
+  changed_when: false
+
 - name: Certificates ready
   ansible.builtin.debug:
     msg:
       - "Wildcard TLS: *.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
       - "API TLS: api.{{ cluster.name }}.{{ cluster.base_domain }}"
+      - "Kubeconfig updated for Let's Encrypt trust"
