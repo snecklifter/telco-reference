@@ -97,8 +97,6 @@ spec:
                       values:
                         - dns-server
                 topologyKey: kubernetes.io/hostname
-      securityContext:
-        fsGroup: 0
       initContainers:
         - name: copy-config
           image: registry.access.redhat.com/ubi9/ubi-micro:latest
