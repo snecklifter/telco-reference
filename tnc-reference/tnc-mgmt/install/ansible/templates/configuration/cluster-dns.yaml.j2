@@ -99,7 +99,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       initContainers:
         - name: copy-config
-          image: registry.access.redhat.com/ubi9/ubi-micro:latest
+          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
           command: ['sh', '-c', 'cp /config-source/hbird-defaults.conf /config/ && cp /zones-source/*.zone /zones/']
           volumeMounts:
             - name: config-source
