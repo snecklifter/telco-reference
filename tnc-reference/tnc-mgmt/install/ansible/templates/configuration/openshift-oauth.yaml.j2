@@ -12,7 +12,7 @@ spec:
         clientID: openshift
         clientSecret:
           name: keycloak-openshift-client-secret
-        issuer: https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/openshift
+        issuer: https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/{{ configuration.keycloak.realm }}
         claims:
           preferredUsername:
             - preferred_username

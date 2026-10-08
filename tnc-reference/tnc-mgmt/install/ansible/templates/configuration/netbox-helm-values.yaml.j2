@@ -141,7 +141,7 @@ extraDeploy:
             staff_role = getattr(settings, 'SOCIAL_AUTH_STAFF_ROLE', '{{ configuration.netbox.admin_group | default("netbox-admin") }}')
             superuser_role = getattr(settings, 'SOCIAL_AUTH_SUPERUSER_ROLE', '{{ configuration.netbox.admin_group | default("netbox-admin") }}')
 
-            jwks_url = "https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/openshift/protocol/openid-connect/certs"
+            jwks_url = "https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/{{ configuration.keycloak.realm }}/protocol/openid-connect/certs"
 
             token = response.get('id_token') or response.get('access_token')
             if not token:

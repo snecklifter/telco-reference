@@ -158,6 +158,7 @@ configuration:
   # Keycloak (RHBK) — SSO for OpenShift, GitLab, and platform services.
   # Deployed before GitLab so OIDC clients are available at GitLab startup.
   keycloak:
+    realm: openshift
     replicas: 2
     postgres:
       instances: 3

@@ -138,7 +138,7 @@
 
 - name: Fetch Keycloak realm public key
   ansible.builtin.uri:
-    url: "https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/openshift"
+    url: "https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/{{ configuration.keycloak.realm }}"
     validate_certs: false
   register: keycloak_realm_info
 
@@ -149,8 +149,8 @@
       --from-literal=SOCIAL_AUTH_KEYCLOAK_KEY=netbox \
       --from-literal=SOCIAL_AUTH_KEYCLOAK_SECRET={{ vault_netbox_client_secret.stdout }} \
       --from-literal=SOCIAL_AUTH_KEYCLOAK_PUBLIC_KEY={{ keycloak_realm_info.json.public_key }} \
-      --from-literal=SOCIAL_AUTH_KEYCLOAK_AUTHORIZATION_URL=https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/openshift/protocol/openid-connect/auth \
-      --from-literal=SOCIAL_AUTH_KEYCLOAK_ACCESS_TOKEN_URL=https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/openshift/protocol/openid-connect/token \
+      --from-literal=SOCIAL_AUTH_KEYCLOAK_AUTHORIZATION_URL=https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/{{ configuration.keycloak.realm }}/protocol/openid-connect/auth \
+      --from-literal=SOCIAL_AUTH_KEYCLOAK_ACCESS_TOKEN_URL=https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/{{ configuration.keycloak.realm }}/protocol/openid-connect/token \
       --dry-run=client -o yaml | \
     oc --kubeconfig {{ kubeconfig_path }} apply -f -
   no_log: true
@@ -180,4 +180,4 @@
   ansible.builtin.debug:
     msg:
       - "NetBox: https://netbox.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
-      - "SSO: Keycloak (openshift realm)"
+      - "SSO: Keycloak ({{ configuration.keycloak.realm }} realm)"

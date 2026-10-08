@@ -179,7 +179,7 @@
 - name: Wait for realm import to complete
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
-    -n keycloak get keycloakrealmimport openshift-realm
+    -n keycloak get keycloakrealmimport {{ configuration.keycloak.realm }}-realm
     -o jsonpath='{.status.conditions[?(@.type=="Done")].status}'
   register: realm_import
   until: realm_import.stdout == "true" or realm_import.stdout == "True"
@@ -207,7 +207,7 @@
           - profile
           - email
         response_type: code
-        issuer: "https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/openshift"
+        issuer: "https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/{{ configuration.keycloak.realm }}"
         discovery: true
         client_auth_method: query
         uid_field: preferred_username
@@ -228,6 +228,6 @@
   ansible.builtin.debug:
     msg:
       - "Keycloak: https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
-      - "Realm: openshift"
+      - "Realm: {{ configuration.keycloak.realm }}"
       - "OpenShift OAuth: configured"
       - "GitLab OIDC: configured"
