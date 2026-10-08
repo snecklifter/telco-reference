@@ -20,6 +20,12 @@
     fail_msg: "No zone files found in /opt/dns/zones/ — bastion DNS role must run first"
     success_msg: "Discovered zones: {{ dns_zones | join(', ') }}"
 
+- name: Grant anyuid SCC to dns-server service account
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    adm policy add-scc-to-user anyuid
+    system:serviceaccount:dns:dns-server
+
 - name: Render cluster DNS manifest
   ansible.builtin.template:
     src: configuration/cluster-dns.yaml.j2

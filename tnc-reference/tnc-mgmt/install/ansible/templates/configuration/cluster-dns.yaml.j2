@@ -5,6 +5,12 @@ metadata:
   name: dns
 ---
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dns-server
+  namespace: dns
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: dns-named-conf
@@ -12,7 +18,7 @@ metadata:
 data:
   hbird-defaults.conf: |
     options {
-        directory "/tmp";
+        directory "/var/named";
         pid-file none;
         session-keyfile none;
 
@@ -97,29 +103,11 @@ spec:
                       values:
                         - dns-server
                 topologyKey: kubernetes.io/hostname
-      initContainers:
-        - name: copy-config
-          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
-          command:
-            - sh
-            - -c
-            - |
-              echo "=== Init UID ===" && id
-              echo "=== Config source ===" && ls -la /config-source/
-              cp /config-source/hbird-defaults.conf /config/
-              echo "=== Config dest ===" && ls -la /config/
-              echo "=== Zones source ===" && ls -la /zones-source/
-              cp /zones-source/*.zone /zones/
-              echo "=== Zones dest ===" && ls -la /zones/
-          volumeMounts:
-            - name: config-source
-              mountPath: /config-source
-            - name: config
-              mountPath: /config
-            - name: zones-source
-              mountPath: /zones-source
-            - name: zones
-              mountPath: /zones
+      serviceAccountName: dns-server
+      securityContext:
+        runAsUser: 25
+        runAsGroup: 25
+        fsGroup: 25
       containers:
         - name: bind
           image: registry.access.redhat.com/hi/bind:latest
@@ -132,9 +120,12 @@ spec:
               protocol: TCP
           volumeMounts:
             - name: config
-              mountPath: /etc/named
+              mountPath: /etc/named/hbird-defaults.conf
+              subPath: hbird-defaults.conf
+              readOnly: true
             - name: zones
               mountPath: /var/named/zones
+              readOnly: true
           readinessProbe:
             exec:
               command:
@@ -169,18 +160,14 @@ spec:
               cpu: "100m"
               memory: "128Mi"
       volumes:
-        - name: config-source
+        - name: config
           configMap:
             name: dns-named-conf
             defaultMode: 0444
-        - name: zones-source
+        - name: zones
           configMap:
             name: dns-zones
             defaultMode: 0444
-        - name: config
-          emptyDir: {}
-        - name: zones
-          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
