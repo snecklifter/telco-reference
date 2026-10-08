@@ -1,0 +1,250 @@
+---
+- name: Skip AAP role if not in components
+  ansible.builtin.meta: end_host
+  when: "'aap' not in configuration.components"
+
+- name: Render AAP manifests
+  ansible.builtin.template:
+    src: "configuration/{{ item.src }}"
+    dest: "{{ config_stage_dir }}/{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - src: aap-operator.yaml.j2
+      dest: aap-operator.yaml
+    - src: aap-cr.yaml.j2
+      dest: aap-cr.yaml
+  loop_control:
+    label: "{{ item.dest }}"
+
+# --- AAP Operator ---
+
+- name: Install AAP operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/aap-operator.yaml
+
+- name: Wait for AAP operator
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap get subscriptions.operators.coreos.com
+    ansible-automation-platform-operator -o jsonpath='{.status.state}'
+  register: aap_state
+  until: aap_state.stdout == "AtLatestKnown"
+  retries: 30
+  delay: 20
+  changed_when: false
+
+- name: Wait for AAP CRD
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    get crd ansibleautomationplatforms.aap.ansible.com
+  register: aap_crd
+  until: aap_crd.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+
+# --- Secrets from Vault ---
+
+- name: Read AAP database password from Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv get -format=json {{ configuration.vault.secret_path }}/aap/postgres'
+  register: vault_aap_db
+  no_log: true
+
+- name: Set AAP database credentials
+  ansible.builtin.set_fact:
+    aap_db_username: "{{ (vault_aap_db.stdout | from_json).data.data.username }}"
+    aap_db_password: "{{ (vault_aap_db.stdout | from_json).data.data.password }}"
+  no_log: true
+
+- name: Create CNPG bootstrap credentials
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap create secret generic aap-postgres-creds
+    --from-literal=username={{ aap_db_username }}
+    --from-literal=password={{ aap_db_password }}
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  no_log: true
+
+- name: Create per-component database secrets
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap create secret generic {{ item.name }}
+    --from-literal=host=aap-postgres-rw.aap.svc.cluster.local
+    --from-literal=port=5432
+    --from-literal=dbname={{ item.database }}
+    --from-literal=user={{ aap_db_username }}
+    --from-literal=password={{ aap_db_password }}
+    --from-literal=sslmode=prefer
+    --from-literal=type=unmanaged
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  loop:
+    - name: aap-controller-db
+      database: automationcontroller
+    - name: aap-hub-db
+      database: automationhub
+    - name: aap-eda-db
+      database: eda
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
+- name: Create controller secret key
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap create secret generic aap-controller-secret-key
+    --from-literal=secret_key={{ lookup("ansible.builtin.password", "/dev/null length=64 chars=ascii_letters,digits") }}
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  no_log: true
+  register: controller_key_result
+  changed_when: "'created' in controller_key_result.stdout"
+
+- name: Create DB field encryption key
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap create secret generic aap-db-field-encryption
+    --from-literal=secret_key={{ lookup("ansible.builtin.password", "/dev/null length=64 chars=ascii_letters,digits") }}
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  no_log: true
+  register: encryption_key_result
+  changed_when: "'created' in encryption_key_result.stdout"
+
+- name: Create admin init user secret
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap create secret generic aap-init-user
+    --from-literal=password={{ lookup("ansible.builtin.password", "/dev/null length=24 chars=ascii_letters,digits") }}
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  no_log: true
+  register: init_user_result
+  changed_when: "'created' in init_user_result.stdout"
+
+# --- NooBaa S3 for Hub ---
+
+- name: Read NooBaa account credentials
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-storage get secret noobaa-account-gitlab -o json
+  register: noobaa_secret_json
+  no_log: true
+
+- name: Set NooBaa credentials
+  ansible.builtin.set_fact:
+    noobaa_access_key: "{{ (noobaa_secret_json.stdout | from_json).data.AWS_ACCESS_KEY_ID | b64decode }}"
+    noobaa_secret_key: "{{ (noobaa_secret_json.stdout | from_json).data.AWS_SECRET_ACCESS_KEY | b64decode }}"
+  no_log: true
+
+- name: Get NooBaa S3 endpoint
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-storage get route s3 -o jsonpath='{.spec.host}'
+  register: noobaa_s3_route
+
+- name: Set NooBaa S3 endpoint
+  ansible.builtin.set_fact:
+    noobaa_s3_endpoint: "https://{{ noobaa_s3_route.stdout }}"
+
+- name: Create AAP S3 buckets
+  ansible.builtin.shell: |
+    /opt/s3-venv/bin/python3 << 'PYSCRIPT'
+    import boto3, urllib3
+    urllib3.disable_warnings()
+    s3 = boto3.client('s3',
+        endpoint_url='{{ noobaa_s3_endpoint }}',
+        aws_access_key_id='{{ noobaa_access_key }}',
+        aws_secret_access_key='{{ noobaa_secret_key }}',
+        verify=False)
+    for bucket in ['aap-galaxy-storage', 'aap-edb-backup']:
+        try:
+            s3.create_bucket(Bucket=bucket)
+            print(f'Created {bucket}')
+        except Exception as e:
+            if 'BucketAlreadyOwnedByYou' in str(e) or 'BucketAlreadyExists' in str(e):
+                print(f'Exists {bucket}')
+            else:
+                raise
+    PYSCRIPT
+  no_log: true
+  register: bucket_creation
+  changed_when: "'Created' in bucket_creation.stdout"
+
+- name: Create Hub Galaxy S3 storage secret
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap create secret generic aap-galaxy-object-storage
+    --from-literal=s3-access-key-id={{ noobaa_access_key }}
+    --from-literal=s3-secret-access-key={{ noobaa_secret_key }}
+    --from-literal=s3-bucket-name=aap-galaxy-storage
+    --from-literal=s3-region=us-east-1
+    --from-literal=s3-endpoint={{ noobaa_s3_endpoint }}
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  no_log: true
+
+- name: Create CNPG S3 backup credentials in aap
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap create secret generic cnpg-s3-backup-creds
+    --from-literal=ACCESS_KEY_ID={{ noobaa_access_key }}
+    --from-literal=SECRET_ACCESS_KEY={{ noobaa_secret_key }}
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  no_log: true
+
+# --- CNPG PostgreSQL ---
+
+- name: Render AAP CNPG cluster manifest
+  ansible.builtin.template:
+    src: configuration/aap-cnpg-cluster.yaml.j2
+    dest: "{{ config_stage_dir }}/aap-cnpg-cluster.yaml"
+    mode: "0644"
+
+- name: Deploy CNPG PostgreSQL cluster for AAP
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/aap-cnpg-cluster.yaml
+
+- name: Wait for AAP CNPG cluster to be ready
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap get clusters.postgresql.k8s.enterprisedb.io aap-postgres
+    -o jsonpath='{.status.phase}'
+  register: aap_cnpg_phase
+  until: aap_cnpg_phase.stdout == "Cluster in healthy state"
+  retries: 60
+  delay: 15
+  changed_when: false
+
+# --- Deploy AAP ---
+
+- name: Deploy Ansible Automation Platform
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/aap-cr.yaml
+
+- name: Wait for AAP gateway to be ready
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap get ansibleautomationplatform aap
+    -o jsonpath='{.status.conditions[?(@.type=="Successful")].status}'
+  register: aap_ready
+  until: aap_ready.stdout == "True"
+  retries: 60
+  delay: 30
+  changed_when: false
+
+- name: AAP ready
+  ansible.builtin.debug:
+    msg:
+      - "AAP: https://aap.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
+      - "Components: Controller, Hub, EDA"
+      - "Database: CNPG HA cluster (4 databases)"

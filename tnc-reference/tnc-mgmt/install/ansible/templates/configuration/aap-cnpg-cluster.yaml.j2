@@ -1,0 +1,169 @@
+---
+apiVersion: postgresql.k8s.enterprisedb.io/v1
+kind: Cluster
+metadata:
+  name: aap-postgres
+  namespace: aap
+spec:
+  affinity:
+    podAntiAffinityType: preferred
+  backup:
+    barmanObjectStore:
+      data:
+        compression: gzip
+        encryption: AES256
+        immediateCheckpoint: false
+        jobs: 2
+      destinationPath: s3://aap-edb-backup/
+      endpointURL: {{ noobaa_s3_endpoint }}
+      s3Credentials:
+        accessKeyId:
+          key: ACCESS_KEY_ID
+          name: cnpg-s3-backup-creds
+        secretAccessKey:
+          key: SECRET_ACCESS_KEY
+          name: cnpg-s3-backup-creds
+      wal:
+        compression: gzip
+        encryption: AES256
+    retentionPolicy: "30d"
+    target: prefer-standby
+    volumeSnapshot:
+      online: true
+      onlineConfiguration:
+        immediateCheckpoint: false
+        waitForArchive: true
+      snapshotOwnerReference: none
+  bootstrap:
+    initdb:
+      database: awx
+      owner: aap
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS pg_trgm;
+        - CREATE EXTENSION IF NOT EXISTS btree_gist;
+        - CREATE EXTENSION IF NOT EXISTS plpgsql;
+        - CREATE DATABASE automationhub OWNER aap TEMPLATE template1;
+        - CREATE DATABASE eda OWNER aap TEMPLATE template1;
+        - CREATE DATABASE automationcontroller OWNER aap TEMPLATE template1;
+        - GRANT ALL PRIVILEGES ON DATABASE awx TO aap;
+        - GRANT ALL PRIVILEGES ON DATABASE automationhub TO aap;
+        - GRANT ALL PRIVILEGES ON DATABASE eda TO aap;
+        - GRANT ALL PRIVILEGES ON DATABASE automationcontroller TO aap;
+      secret:
+        name: aap-postgres-creds
+  enablePDB: true
+  enableSuperuserAccess: true
+  failoverDelay: 0
+  imageName: {{ configuration.gitlab.postgres.image }}
+  instances: {{ configuration.aap.postgres.instances | default(3) }}
+  logLevel: info
+  maxSyncReplicas: 0
+  minSyncReplicas: 0
+  monitoring:
+    customQueriesConfigMap:
+      - key: queries
+        name: postgresql-operator-default-monitoring
+    disableDefaultQueries: false
+    enablePodMonitor: true
+  postgresGID: 26
+  postgresql:
+    parameters:
+      archive_mode: "on"
+      archive_timeout: 5min
+      dynamic_shared_memory_type: posix
+      full_page_writes: "on"
+      log_destination: csvlog
+      log_directory: /controller/log
+      log_filename: postgres
+      log_rotation_age: "0"
+      log_rotation_size: "0"
+      log_truncate_on_rotation: "false"
+      logging_collector: "on"
+      max_connections: "200"
+      max_parallel_workers: "8"
+      max_replication_slots: "32"
+      max_slot_wal_keep_size: "-1"
+      max_worker_processes: "8"
+      shared_buffers: 1GB
+      shared_memory_type: mmap
+      ssl_max_protocol_version: TLSv1.3
+      ssl_min_protocol_version: TLSv1.3
+      wal_keep_size: 512MB
+      wal_level: logical
+      wal_log_hints: "on"
+      wal_receiver_timeout: 5s
+      wal_sender_timeout: 60s
+    syncReplicaElectionConstraint:
+      enabled: false
+  postgresUID: 26
+  primaryUpdateMethod: restart
+  primaryUpdateStrategy: unsupervised
+  probes:
+    liveness:
+      isolationCheck:
+        connectionTimeout: 1000
+        enabled: true
+        requestTimeout: 1000
+  replicationSlots:
+    highAvailability:
+      enabled: true
+      slotPrefix: _cnp_
+    synchronizeReplicas:
+      enabled: true
+    updateInterval: 30
+  resources:
+    limits:
+      cpu: "750m"
+      memory: "4Gi"
+    requests:
+      cpu: "500m"
+      memory: "2Gi"
+  smartShutdownTimeout: 180
+  startDelay: 3600
+  stopDelay: 1800
+  storage:
+    resizeInUseVolumes: true
+    size: {{ configuration.aap.postgres.storage_size | default("100Gi") }}
+    storageClass: {{ configuration.aap.postgres.storage_class | default(configuration.odf.default_storage_class) }}
+  switchoverDelay: 3600
+  walStorage:
+    resizeInUseVolumes: true
+    size: {{ configuration.aap.postgres.wal_storage_size | default("15Gi") }}
+    storageClass: {{ configuration.aap.postgres.storage_class | default(configuration.odf.default_storage_class) }}
+---
+apiVersion: postgresql.k8s.enterprisedb.io/v1
+kind: ScheduledBackup
+metadata:
+  name: aap-daily-backup
+  namespace: aap
+spec:
+  backupOwnerReference: self
+  cluster:
+    name: aap-postgres
+  immediate: true
+  schedule: "0 0 5 * * *"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cnpg-s3-backup-access
+  namespace: aap
+rules:
+  - apiGroups: [""]
+    resourceNames: [cnpg-s3-backup-creds]
+    resources: [secrets]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cnpg-s3-backup-access
+  namespace: aap
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cnpg-s3-backup-access
+subjects:
+  - kind: ServiceAccount
+    name: aap-postgres
+    namespace: aap

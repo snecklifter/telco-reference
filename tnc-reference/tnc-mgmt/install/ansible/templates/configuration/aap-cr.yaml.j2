@@ -1,0 +1,42 @@
+---
+apiVersion: aap.ansible.com/v1alpha1
+kind: AnsibleAutomationPlatform
+metadata:
+  name: aap
+  namespace: aap
+spec:
+  admin_password_secret: aap-init-user
+  api:
+    log_level: INFO
+    replicas: {{ configuration.aap.api_replicas | default(3) }}
+  controller:
+    secret_key_secret: aap-controller-secret-key
+    disabled: false
+    replicas: {{ configuration.aap.controller_replicas | default(3) }}
+    postgres_configuration_secret: aap-controller-db
+  database:
+    database_secret: aap-postgres-creds
+  db_fields_encryption_secret: aap-db-field-encryption
+  hostname: aap.apps.{{ cluster.name }}.{{ cluster.base_domain }}
+  hub:
+    disabled: false
+    replicas: {{ configuration.aap.hub_replicas | default(2) }}
+    object_storage_s3_secret: aap-galaxy-object-storage
+    storage_type: S3
+    database:
+      database_secret: aap-hub-db
+  eda:
+    disabled: false
+    database:
+      database_secret: aap-eda-db
+  image_pull_policy: IfNotPresent
+  ingress_type: Route
+  lightspeed:
+    disabled: true
+  metrics:
+    disabled: true
+  no_log: true
+  redis_mode: standalone
+  route_host: aap.apps.{{ cluster.name }}.{{ cluster.base_domain }}
+  route_tls_termination_mechanism: Edge
+  service_type: ClusterIP

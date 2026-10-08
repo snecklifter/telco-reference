@@ -127,6 +127,7 @@ configuration:
     - cnv
     - keycloak
     - netbox
+    - aap
     - devspaces
     # - registry        # disconnected only
     # - kafka
@@ -172,6 +173,17 @@ configuration:
       instances: 3
       storage_size: "10Gi"
       wal_storage_size: "5Gi"
+      storage_class: ocs-storagecluster-ceph-rbd
+
+  # Ansible Automation Platform — controller, hub, EDA with CNPG database.
+  aap:
+    controller_replicas: 3
+    api_replicas: 3
+    hub_replicas: 2
+    postgres:
+      instances: 3
+      storage_size: "100Gi"
+      wal_storage_size: "15Gi"
       storage_class: ocs-storagecluster-ceph-rbd
 
   # NetBox — network source of truth, backed by CNPG with Keycloak SSO.

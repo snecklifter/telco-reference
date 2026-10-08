@@ -50,5 +50,6 @@
     - certmanager
     - keycloak
     - netbox
+    - aap
     - gitlab
     - gitops

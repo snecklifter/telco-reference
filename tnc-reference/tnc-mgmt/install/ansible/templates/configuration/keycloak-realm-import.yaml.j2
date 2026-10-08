@@ -69,3 +69,20 @@ spec:
           - openid
           - profile
           - email
+      - clientId: aap
+        name: Ansible Automation Platform
+        enabled: true
+        clientAuthenticatorType: client-secret
+        secret: {{ keycloak_aap_client_secret }}
+        redirectUris:
+          - "https://aap.apps.{{ cluster.name }}.{{ cluster.base_domain }}/social/complete/oidc/"
+        webOrigins:
+          - "https://aap.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
+        standardFlowEnabled: true
+        directAccessGrantsEnabled: false
+        publicClient: false
+        protocol: openid-connect
+        defaultClientScopes:
+          - openid
+          - profile
+          - email
