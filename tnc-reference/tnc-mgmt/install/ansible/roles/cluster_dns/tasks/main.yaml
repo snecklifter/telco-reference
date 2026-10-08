@@ -63,9 +63,22 @@
   changed_when: false
   failed_when: networking.api_vip not in cluster_dns_check.stdout
 
+- name: Configure cluster DNS operator to use in-cluster BIND
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    patch dns.operator.openshift.io default --type merge
+    -p '{"spec":{"upstreamResolvers":{"upstreams":[{"type":"Network","address":"{{ networking.dns_vip }}","port":53}]}}}'
+
+- name: Wait for DNS operator rollout
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-dns rollout status daemonset/dns-default --timeout=300s
+  changed_when: false
+
 - name: Cluster DNS ready
   ansible.builtin.debug:
     msg:
       - "Cluster DNS: {{ networking.dns_vip }}"
       - "Zones: {{ dns_zones | join(', ') }}"
-      - "Replicas: 3 (anti-affinity across workers)"
+      - "Upstream forwarder: configured"
+      - "Bastion DNS can now be decommissioned"
