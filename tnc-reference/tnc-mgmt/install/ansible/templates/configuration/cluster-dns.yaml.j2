@@ -47,6 +47,12 @@ data:
         file "/var/named/zones/{{ zone }}.zone";
     };
 {% endfor %}
+{% for zone in networking.extra_zones | default([]) %}
+    zone "{{ zone.name }}" IN {
+        type primary;
+        file "/var/named/zones/{{ zone.name }}.zone";
+    };
+{% endfor %}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -77,6 +83,22 @@ data:
     {{ record.name }}    IN  {{ record.type }}   {{ record.value }}
 {% endfor %}
 {% endif %}
+{% endfor %}
+{% for zone in networking.extra_zones | default([]) %}
+  {{ zone.name }}.zone: |
+    $TTL 86400
+    @   IN  SOA ns1.{{ zone.name }}. admin.{{ zone.name }}. (
+                2025010101  ; serial
+                3600        ; refresh
+                1800        ; retry
+                604800      ; expire
+                86400       ; minimum TTL
+            )
+    @       IN  NS  ns1
+    ns1     IN  A   {{ networking.dns_vip }}
+{% for record in zone.records %}
+    {{ record.name }}    IN  {{ record.type }}   {{ record.value }}
+{% endfor %}
 {% endfor %}
 ---
 apiVersion: apps/v1

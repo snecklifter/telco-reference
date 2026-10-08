@@ -26,6 +26,18 @@
     mode: "0644"
   register: zone_updated
 
+- name: Generate extra zone files
+  ansible.builtin.template:
+    src: extra-zone.db.j2
+    dest: "{{ dns_dir }}/zones/{{ item.name }}.zone"
+    mode: "0644"
+  loop: "{{ networking.extra_zones | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  vars:
+    extra_zone: "{{ item }}"
+  register: extra_zones_updated
+
 - name: Discover all zone files in zones directory
   ansible.builtin.find:
     paths: "{{ dns_dir }}/zones"

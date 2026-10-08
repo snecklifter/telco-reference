@@ -38,6 +38,14 @@ networking:
   #     type: A
   #     value: 172.31.61.100
 
+  # Extra DNS zones with their own records (for parent/sibling domains)
+  # extra_zones:
+  #   - name: example.com
+  #     records:
+  #       - name: ntp
+  #         type: CNAME
+  #         value: ntp.externaldomain.com.
+
   # NTP sources (omit to use default Red Hat NTP pool)
   # ntp_sources:
   #   - ntp1.example.com

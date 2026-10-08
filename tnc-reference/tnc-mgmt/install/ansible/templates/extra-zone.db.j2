@@ -1,0 +1,14 @@
+$TTL 86400
+@   IN  SOA ns1.{{ extra_zone.name }}. admin.{{ extra_zone.name }}. (
+            2025010101  ; serial
+            3600        ; refresh
+            1800        ; retry
+            604800      ; expire
+            86400       ; minimum TTL
+        )
+@       IN  NS  ns1
+ns1     IN  A   {{ networking.dns_servers[0] }}
+
+{% for record in extra_zone.records %}
+{{ record.name }}    IN  {{ record.type }}   {{ record.value }}
+{% endfor %}
