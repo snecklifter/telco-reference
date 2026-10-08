@@ -16,3 +16,6 @@ api-int IN  A   {{ networking.api_vip }}
 {% for host in hosts %}
 {{ host.hostname }}    IN  A   {{ host.ip }}
 {% endfor %}
+{% for record in networking.extra_dns_records | default([]) %}
+{{ record.name }}    IN  {{ record.type }}   {{ record.value }}
+{% endfor %}

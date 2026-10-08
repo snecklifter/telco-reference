@@ -29,6 +29,15 @@ networking:
     - 192.0.2.4
   default_gateway: 172.31.61.1
 
+  # Extra DNS records added to the cluster zone (A, CNAME, TXT, etc.)
+  # extra_dns_records:
+  #   - name: alias
+  #     type: CNAME
+  #     value: target.example.com.
+  #   - name: service
+  #     type: A
+  #     value: 172.31.61.100
+
   # NTP sources (omit to use default Red Hat NTP pool)
   # ntp_sources:
   #   - ntp1.example.com
