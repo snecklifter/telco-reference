@@ -100,12 +100,16 @@ spec:
       initContainers:
         - name: copy-config
           image: registry.access.redhat.com/ubi9/ubi-micro:latest
-          command: ['cp', '/config-source/hbird-defaults.conf', '/config/hbird-defaults.conf']
+          command: ['sh', '-c', 'cp /config-source/hbird-defaults.conf /config/ && cp /zones-source/*.zone /zones/']
           volumeMounts:
             - name: config-source
               mountPath: /config-source
             - name: config
               mountPath: /config
+            - name: zones-source
+              mountPath: /zones-source
+            - name: zones
+              mountPath: /zones
       containers:
         - name: bind
           image: registry.access.redhat.com/hi/bind:latest
@@ -121,21 +125,30 @@ spec:
               mountPath: /etc/named
             - name: zones
               mountPath: /var/named/zones
-              readOnly: true
           readinessProbe:
             exec:
               command:
-                - /bin/sh
-                - -c
-                - "dig +short @127.0.0.1 -p 8053 version.bind txt chaos | grep -q ."
+                - dig
+                - +short
+                - "@127.0.0.1"
+                - -p
+                - "8053"
+                - version.bind
+                - txt
+                - chaos
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             exec:
               command:
-                - /bin/sh
-                - -c
-                - "dig +short @127.0.0.1 -p 8053 version.bind txt chaos | grep -q ."
+                - dig
+                - +short
+                - "@127.0.0.1"
+                - -p
+                - "8053"
+                - version.bind
+                - txt
+                - chaos
             initialDelaySeconds: 10
             periodSeconds: 30
           resources:
@@ -150,12 +163,14 @@ spec:
           configMap:
             name: dns-named-conf
             defaultMode: 0444
-        - name: config
-          emptyDir: {}
-        - name: zones
+        - name: zones-source
           configMap:
             name: dns-zones
             defaultMode: 0444
+        - name: config
+          emptyDir: {}
+        - name: zones
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
