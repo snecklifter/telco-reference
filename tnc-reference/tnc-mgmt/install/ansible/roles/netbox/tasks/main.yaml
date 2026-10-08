@@ -1,0 +1,179 @@
+---
+- name: Create NetBox namespace
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    create namespace netbox --dry-run=client -o yaml
+  register: netbox_ns_yaml
+
+- name: Apply NetBox namespace
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  args:
+    stdin: "{{ netbox_ns_yaml.stdout }}"
+
+- name: Render NetBox manifests
+  ansible.builtin.template:
+    src: "configuration/{{ item.src }}"
+    dest: "{{ config_stage_dir }}/{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - src: netbox-external-secrets.yaml.j2
+      dest: netbox-external-secrets.yaml
+    - src: netbox-helm-values.yaml.j2
+      dest: netbox-helm-values.yaml
+  loop_control:
+    label: "{{ item.dest }}"
+
+# --- ExternalSecrets ---
+
+- name: Apply NetBox ExternalSecrets
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/netbox-external-secrets.yaml
+
+- name: Wait for NetBox database credentials
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n netbox get secret netbox-postgres-creds
+  register: netbox_creds_check
+  until: netbox_creds_check.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+
+# --- CNPG PostgreSQL ---
+
+- name: Read NooBaa account credentials for backups
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-storage get secret noobaa-account-gitlab -o json
+  register: noobaa_secret_json
+  no_log: true
+
+- name: Set NooBaa credentials
+  ansible.builtin.set_fact:
+    noobaa_access_key: "{{ (noobaa_secret_json.stdout | from_json).data.AWS_ACCESS_KEY_ID | b64decode }}"
+    noobaa_secret_key: "{{ (noobaa_secret_json.stdout | from_json).data.AWS_SECRET_ACCESS_KEY | b64decode }}"
+  no_log: true
+
+- name: Get NooBaa S3 endpoint
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n openshift-storage get route s3 -o jsonpath='{.spec.host}'
+  register: noobaa_s3_route
+
+- name: Set NooBaa S3 endpoint
+  ansible.builtin.set_fact:
+    noobaa_s3_endpoint: "https://{{ noobaa_s3_route.stdout }}"
+
+- name: Create NetBox S3 backup bucket
+  ansible.builtin.shell: |
+    /opt/s3-venv/bin/python3 << 'PYSCRIPT'
+    import boto3, urllib3
+    urllib3.disable_warnings()
+    s3 = boto3.client('s3',
+        endpoint_url='{{ noobaa_s3_endpoint }}',
+        aws_access_key_id='{{ noobaa_access_key }}',
+        aws_secret_access_key='{{ noobaa_secret_key }}',
+        verify=False)
+    try:
+        s3.create_bucket(Bucket='netbox-edb-backup')
+        print('Created netbox-edb-backup')
+    except Exception as e:
+        if 'BucketAlreadyOwnedByYou' in str(e) or 'BucketAlreadyExists' in str(e):
+            print('Exists netbox-edb-backup')
+        else:
+            raise
+    PYSCRIPT
+  no_log: true
+  register: bucket_creation
+  changed_when: "'Created' in bucket_creation.stdout"
+
+- name: Create CNPG S3 backup credentials in netbox
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n netbox create secret generic cnpg-s3-backup-creds
+    --from-literal=ACCESS_KEY_ID={{ noobaa_access_key }}
+    --from-literal=SECRET_ACCESS_KEY={{ noobaa_secret_key }}
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  no_log: true
+
+- name: Render NetBox CNPG cluster manifest
+  ansible.builtin.template:
+    src: configuration/netbox-cnpg-cluster.yaml.j2
+    dest: "{{ config_stage_dir }}/netbox-cnpg-cluster.yaml"
+    mode: "0644"
+
+- name: Deploy CNPG PostgreSQL cluster for NetBox
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/netbox-cnpg-cluster.yaml
+
+- name: Wait for NetBox CNPG cluster to be ready
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n netbox get clusters.postgresql.k8s.enterprisedb.io netbox-postgres
+    -o jsonpath='{.status.phase}'
+  register: netbox_cnpg_phase
+  until: netbox_cnpg_phase.stdout == "Cluster in healthy state"
+  retries: 60
+  delay: 15
+  changed_when: false
+
+# --- Keycloak client secret ---
+
+- name: Read NetBox Keycloak client secret from Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv get -field=secret {{ configuration.vault.secret_path }}/keycloak/clients/netbox'
+  register: vault_netbox_client_secret
+  no_log: true
+
+- name: Fetch Keycloak realm public key
+  ansible.builtin.uri:
+    url: "https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/openshift"
+    validate_certs: false
+  register: keycloak_realm_info
+
+- name: Create NetBox Keycloak client secret
+  ansible.builtin.shell: |
+    oc --kubeconfig {{ kubeconfig_path }} \
+      -n netbox create secret generic netbox-keycloak-client \
+      --from-literal=SOCIAL_AUTH_KEYCLOAK_KEY=netbox \
+      --from-literal=SOCIAL_AUTH_KEYCLOAK_SECRET={{ vault_netbox_client_secret.stdout }} \
+      --from-literal=SOCIAL_AUTH_KEYCLOAK_PUBLIC_KEY={{ keycloak_realm_info.json.public_key }} \
+      --from-literal=SOCIAL_AUTH_KEYCLOAK_AUTHORIZATION_URL=https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/openshift/protocol/openid-connect/auth \
+      --from-literal=SOCIAL_AUTH_KEYCLOAK_ACCESS_TOKEN_URL=https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/openshift/protocol/openid-connect/token \
+      --dry-run=client -o yaml | \
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  no_log: true
+
+# --- Deploy NetBox via Helm ---
+
+- name: Add NetBox Helm repository
+  ansible.builtin.command: helm repo add netbox https://charts.netbox.oss.netboxlabs.com
+  register: helm_repo
+  changed_when: "'has been added' in helm_repo.stdout"
+  failed_when: helm_repo.rc != 0 and 'already exists' not in helm_repo.stderr
+
+- name: Update Helm repositories
+  ansible.builtin.command: helm repo update netbox
+
+- name: Deploy NetBox via Helm
+  ansible.builtin.command: >
+    helm upgrade --install netbox netbox/netbox
+    --namespace netbox
+    --kubeconfig {{ kubeconfig_path }}
+    --version {{ configuration.netbox.chart_version }}
+    --values {{ config_stage_dir }}/netbox-helm-values.yaml
+    --timeout 10m
+    --wait
+
+- name: NetBox ready
+  ansible.builtin.debug:
+    msg:
+      - "NetBox: https://netbox.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
+      - "SSO: Keycloak (openshift realm)"

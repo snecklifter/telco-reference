@@ -148,8 +148,30 @@
   loop:
     - openshift
     - gitlab
+    - netbox
   no_log: true
   when: vault_keycloak_check.rc != 0
+
+- name: Check if NetBox secrets exist in Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }} vault kv get -format=json {{ configuration.vault.secret_path }}/netbox/postgres'
+  register: vault_netbox_check
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Generate and write NetBox database credentials to Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv put {{ configuration.vault.secret_path }}/netbox/postgres
+    username=netbox
+    password={{ lookup("ansible.builtin.password", "/dev/null length=24 chars=ascii_letters,digits") }}'
+  no_log: true
+  when: vault_netbox_check.rc != 0
 
 - name: Write DNS API credentials to Vault
   ansible.builtin.command: >

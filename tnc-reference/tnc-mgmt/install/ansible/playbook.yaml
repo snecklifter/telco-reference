@@ -49,5 +49,6 @@
     - vault
     - certmanager
     - keycloak
+    - netbox
     - gitlab
     - gitops

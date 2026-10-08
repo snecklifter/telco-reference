@@ -151,6 +151,15 @@
   register: vault_gitlab_secret
   no_log: true
 
+- name: Read NetBox OIDC client secret from Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv get -field=secret {{ configuration.vault.secret_path }}/keycloak/clients/netbox'
+  register: vault_netbox_secret
+  no_log: true
+
 - name: Render and apply Keycloak realm import
   ansible.builtin.template:
     src: configuration/keycloak-realm-import.yaml.j2
@@ -159,6 +168,7 @@
   vars:
     keycloak_openshift_client_secret: "{{ vault_openshift_secret.stdout }}"
     keycloak_gitlab_client_secret: "{{ vault_gitlab_secret.stdout }}"
+    keycloak_netbox_client_secret: "{{ vault_netbox_secret.stdout }}"
   no_log: true
 
 - name: Apply Keycloak realm import

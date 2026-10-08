@@ -1,0 +1,184 @@
+debug: false
+ingress:
+  enabled: true
+  annotations:
+    route.openshift.io/termination: "edge"
+  hosts:
+    - host: netbox.apps.{{ cluster.name }}.{{ cluster.base_domain }}
+      paths:
+        - /
+securityContext:
+  runAsUser: null
+  runAsGroup: null
+  seLinuxOptions: null
+podSecurityContext:
+  fsGroup: null
+init:
+  image:
+    registry: registry.redhat.io
+    repository: ubi9
+    tag: "9.7"
+    pullPolicy: IfNotPresent
+  securityContext:
+    runAsUser: null
+    runAsGroup: null
+    seLinuxOptions: null
+waitForBackend:
+  containerSecurityContext:
+    runAsUser: null
+    runAsGroup: null
+    runAsNonRoot: null
+    seLinuxOptions: null
+housekeeping:
+  enabled: true
+  securityContext:
+    runAsUser: null
+    runAsGroup: null
+    seLinuxOptions: null
+  podSecurityContext:
+    fsGroup: null
+worker:
+  enabled: true
+  waitForBackend:
+    containerSecurityContext:
+      enabled: true
+      runAsUser: null
+      runAsGroup: null
+      runAsNonRoot: true
+      privileged: false
+      seLinuxOptions: null
+  securityContext:
+    capabilities:
+      drop:
+        - ALL
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: null
+    runAsGroup: null
+    seLinuxOptions: null
+  podSecurityContext:
+    fsGroup: null
+postgresql:
+  enabled: false
+externalDatabase:
+  host: netbox-postgres-rw.netbox.svc.cluster.local
+  port: 5432
+  database: netbox
+  username: netbox
+  existingSecretName: netbox-postgres-creds
+  existingSecretKey: password
+valkey:
+  enabled: true
+  replica:
+    replicaCount: 2
+preferIPv4: true
+remoteAuth:
+  enabled: true
+  backends:
+    - social_core.backends.keycloak.KeycloakOAuth2
+  autoCreateUser: true
+resources:
+  limits:
+    cpu: 750m
+    ephemeral-storage: 2Gi
+    memory: 1536Mi
+  requests:
+    cpu: 500m
+    ephemeral-storage: 50Mi
+    memory: 1024Mi
+readinessProbe:
+  initialDelaySeconds: 0
+livenessProbe:
+  initialDelaySeconds: 0
+extraConfig:
+  - secret:
+      secretName: netbox-keycloak-client
+  - values:
+      SOCIAL_AUTH_PIPELINE:
+        - "social_core.pipeline.social_auth.social_details"
+        - "social_core.pipeline.social_auth.social_uid"
+        - "social_core.pipeline.social_auth.social_user"
+        - "social_core.pipeline.user.get_username"
+        - "social_core.pipeline.social_auth.associate_by_email"
+        - "social_core.pipeline.user.create_user"
+        - "social_core.pipeline.social_auth.associate_user"
+        - "netbox.authentication.user_default_groups_handler"
+        - "social_core.pipeline.social_auth.load_extra_data"
+        - "social_core.pipeline.user.user_details"
+        - "netbox.sso_pipeline_roles.set_role"
+        - "netbox.sso_pipeline.set_superuser"
+extraVolumes:
+  - name: sso-pipeline-roles
+    configMap:
+      name: sso-pipeline-roles
+  - name: sso-pipeline
+    configMap:
+      name: netbox-sso-pipeline
+extraVolumeMounts:
+  - name: sso-pipeline-roles
+    mountPath: /opt/netbox/netbox/netbox/sso_pipeline_roles.py
+    subPath: sso_pipeline_roles.py
+    readOnly: true
+  - name: sso-pipeline
+    mountPath: /opt/netbox/netbox/netbox/sso_pipeline.py
+    subPath: sso_pipeline.py
+    readOnly: true
+extraDeploy:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: sso-pipeline-roles
+    data:
+      sso_pipeline_roles.py: |
+        from django.conf import settings
+        from django.contrib.auth.models import Group
+        import jwt
+        from jwt import PyJWKClient
+
+        def set_role(response, user, backend, *args, **kwargs):
+            client_id = getattr(settings, 'SOCIAL_AUTH_KEYCLOAK_KEY', None)
+            staff_role = getattr(settings, 'SOCIAL_AUTH_STAFF_ROLE', '{{ configuration.netbox.admin_group | default("netbox-admin") }}')
+            superuser_role = getattr(settings, 'SOCIAL_AUTH_SUPERUSER_ROLE', '{{ configuration.netbox.admin_group | default("netbox-admin") }}')
+
+            jwks_url = "https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/openshift/protocol/openid-connect/certs"
+
+            token = response.get('id_token') or response.get('access_token')
+            if not token:
+                return
+
+            jwks_client = PyJWKClient(jwks_url)
+            signing_key = jwks_client.get_signing_key_from_jwt(token)
+
+            decoded = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256"],
+                options={"verify_aud": False}
+            )
+
+            roles = decoded.get('groups', [])
+
+            user.is_staff = (staff_role in roles)
+            user.is_superuser = (superuser_role in roles)
+            user.save()
+
+            all_groups = Group.objects.all()
+            for group in all_groups:
+                if group.name in roles:
+                    group.user_set.add(user)
+                else:
+                    group.user_set.remove(user)
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: netbox-sso-pipeline
+    data:
+      sso_pipeline.py: |
+        def set_superuser(backend, user, response, *args, **kwargs):
+            groups = response.get('groups', [])
+            normalized = [g.lstrip('/') for g in groups]
+            if '{{ configuration.netbox.superuser_group | default("cluster-admins") }}' in normalized:
+                user.is_superuser = True
+                user.is_staff = True
+            user.save()

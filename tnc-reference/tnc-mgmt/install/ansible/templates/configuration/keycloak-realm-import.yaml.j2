@@ -52,3 +52,20 @@ spec:
           - openid
           - profile
           - email
+      - clientId: netbox
+        name: NetBox
+        enabled: true
+        clientAuthenticatorType: client-secret
+        secret: {{ keycloak_netbox_client_secret }}
+        redirectUris:
+          - "https://netbox.apps.{{ cluster.name }}.{{ cluster.base_domain }}/oauth/complete/keycloak/"
+        webOrigins:
+          - "https://netbox.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
+        standardFlowEnabled: true
+        directAccessGrantsEnabled: false
+        publicClient: false
+        protocol: openid-connect
+        defaultClientScopes:
+          - openid
+          - profile
+          - email
