@@ -91,6 +91,12 @@
     label: "{{ item.item | default('') }}"
   when: raid_enabled | bool
 
+- name: Enable etcd encryption at install
+  ansible.builtin.template:
+    src: etcd-encryption.yaml.j2
+    dest: "{{ build_dir }}/openshift/etcd-encryption.yaml"
+    mode: "0640"
+
 - name: Copy disconnected install manifests
   ansible.builtin.copy:
     src: "{{ extra_manifests_dir }}/"
