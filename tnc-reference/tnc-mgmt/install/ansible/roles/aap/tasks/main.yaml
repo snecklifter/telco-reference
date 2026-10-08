@@ -75,7 +75,7 @@
     oc --kubeconfig {{ kubeconfig_path }} apply -f -
   no_log: true
 
-- name: Create controller and EDA database secrets
+- name: Create per-component database secrets
   ansible.builtin.shell: >
     oc --kubeconfig {{ kubeconfig_path }}
     -n aap create secret generic {{ item.name }}
@@ -84,30 +84,19 @@
     --from-literal=database={{ item.database }}
     --from-literal=username={{ aap_db_username }}
     --from-literal=password={{ aap_db_password }}
+    --from-literal=sslmode=prefer
+    --from-literal=type=unmanaged
     --dry-run=client -o yaml |
     oc --kubeconfig {{ kubeconfig_path }} apply -f -
   loop:
     - name: aap-controller-db
       database: automationcontroller
+    - name: aap-hub-db
+      database: automationhub
     - name: aap-eda-db
       database: eda
   loop_control:
     label: "{{ item.name }}"
-  no_log: true
-
-- name: Create hub database secret
-  ansible.builtin.shell: >
-    oc --kubeconfig {{ kubeconfig_path }}
-    -n aap create secret generic aap-hub-db
-    --from-literal=host=aap-postgres-rw
-    --from-literal=port=5432
-    --from-literal=database=automationhub
-    --from-literal=username={{ aap_db_username }}
-    --from-literal=password={{ aap_db_password }}
-    --from-literal=sslmode=prefer
-    --from-literal=type=unmanaged
-    --dry-run=client -o yaml |
-    oc --kubeconfig {{ kubeconfig_path }} apply -f -
   no_log: true
 
 - name: Create controller secret key
