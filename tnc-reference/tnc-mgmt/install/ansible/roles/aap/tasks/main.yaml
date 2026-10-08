@@ -71,7 +71,21 @@
     oc --kubeconfig {{ kubeconfig_path }} apply -f -
   no_log: true
 
-- name: Create per-component database secrets
+- name: Create gateway database secret
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap create secret generic aap-gateway-db
+    --from-literal=host=aap-postgres-rw
+    --from-literal=port=5432
+    --from-literal=database=awx
+    --from-literal=username={{ aap_db_username }}
+    --from-literal=password={{ aap_db_password }}
+    --from-literal=type=unmanaged
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
+  no_log: true
+
+- name: Create controller and EDA database secrets
   ansible.builtin.shell: >
     oc --kubeconfig {{ kubeconfig_path }}
     -n aap create secret generic {{ item.name }}
@@ -80,20 +94,30 @@
     --from-literal=database={{ item.database }}
     --from-literal=username={{ aap_db_username }}
     --from-literal=password={{ aap_db_password }}
-    --from-literal=type=unmanaged
     --dry-run=client -o yaml |
     oc --kubeconfig {{ kubeconfig_path }} apply -f -
   loop:
-    - name: aap-gateway-db
-      database: awx
     - name: aap-controller-db
       database: automationcontroller
-    - name: aap-hub-db
-      database: automationhub
     - name: aap-eda-db
       database: eda
   loop_control:
     label: "{{ item.name }}"
+  no_log: true
+
+- name: Create hub database secret
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap create secret generic aap-hub-db
+    --from-literal=host=aap-postgres-rw
+    --from-literal=port=5432
+    --from-literal=database=automationhub
+    --from-literal=username={{ aap_db_username }}
+    --from-literal=password={{ aap_db_password }}
+    --from-literal=sslmode=prefer
+    --from-literal=type=unmanaged
+    --dry-run=client -o yaml |
+    oc --kubeconfig {{ kubeconfig_path }} apply -f -
   no_log: true
 
 - name: Create controller secret key
@@ -186,7 +210,6 @@
     --from-literal=s3-secret-access-key={{ noobaa_secret_key }}
     --from-literal=s3-bucket-name=aap-galaxy-storage
     --from-literal=s3-region=us-east-1
-    --from-literal=s3-endpoint={{ noobaa_s3_endpoint }}
     --dry-run=client -o yaml |
     oc --kubeconfig {{ kubeconfig_path }} apply -f -
   no_log: true
