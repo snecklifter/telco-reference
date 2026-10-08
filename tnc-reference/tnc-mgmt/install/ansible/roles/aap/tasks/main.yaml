@@ -61,20 +61,10 @@
     aap_db_password: "{{ (vault_aap_db.stdout | from_json).data.data.password }}"
   no_log: true
 
-- name: Create CNPG bootstrap credentials
+- name: Create AAP database credentials
   ansible.builtin.shell: >
     oc --kubeconfig {{ kubeconfig_path }}
     -n aap create secret generic aap-postgres-creds
-    --from-literal=username={{ aap_db_username }}
-    --from-literal=password={{ aap_db_password }}
-    --dry-run=client -o yaml |
-    oc --kubeconfig {{ kubeconfig_path }} apply -f -
-  no_log: true
-
-- name: Create gateway database secret
-  ansible.builtin.shell: >
-    oc --kubeconfig {{ kubeconfig_path }}
-    -n aap create secret generic aap-gateway-db
     --from-literal=host=aap-postgres-rw
     --from-literal=port=5432
     --from-literal=database=awx

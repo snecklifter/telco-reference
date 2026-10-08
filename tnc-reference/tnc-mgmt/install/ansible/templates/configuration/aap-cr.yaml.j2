@@ -15,7 +15,7 @@ spec:
     replicas: {{ configuration.aap.controller_replicas | default(3) }}
     postgres_configuration_secret: aap-controller-db
   database:
-    database_secret: aap-gateway-db
+    database_secret: aap-postgres-creds
   db_fields_encryption_secret: aap-db-field-encryption
   hostname: aap.apps.{{ cluster.name }}.{{ cluster.base_domain }}
   hub:
