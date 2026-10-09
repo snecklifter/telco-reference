@@ -1,23 +1,43 @@
 ---
-- name: Check if openshift-install is present
+- name: Check installed openshift-install version
   ansible.builtin.command: "{{ installer_binary }} version"
+  register: installer_local
   changed_when: false
-  register: installer_check
-  ignore_errors: true
+  failed_when: false
+
+- name: Get local version
+  ansible.builtin.set_fact:
+    local_ocp_version: "{{ (installer_local.stdout | default('') | regex_search('v([0-9]+\\.[0-9]+\\.[0-9]+)', '\\1'))[0] | default('none') }}"
+
+- name: Check latest available version for channel
+  ansible.builtin.uri:
+    url: "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/{{ cluster.ocp_version }}/release.txt"
+    return_content: true
+  register: release_info
+
+- name: Get remote version
+  ansible.builtin.set_fact:
+    remote_ocp_version: "{{ release_info.content | regex_search('Version:\\s+([0-9]+\\.[0-9]+\\.[0-9]+)', '\\1') | first }}"
+
+- name: Report version check
+  ansible.builtin.debug:
+    msg: "{{ 'Update available: ' + local_ocp_version + ' → ' + remote_ocp_version if local_ocp_version != remote_ocp_version else 'Up to date: ' + local_ocp_version }}"
 
 - name: Download openshift-install
   ansible.builtin.get_url:
     url: "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/{{ cluster.ocp_version }}/openshift-install-linux.tar.gz"
     dest: /tmp/openshift-install-linux.tar.gz
     mode: "0644"
-  when: installer_check.rc != 0
+    force: true
+  when: local_ocp_version != remote_ocp_version
 
 - name: Download OpenShift client (oc)
   ansible.builtin.get_url:
     url: "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/{{ cluster.ocp_version }}/openshift-client-linux.tar.gz"
     dest: /tmp/openshift-client-linux.tar.gz
     mode: "0644"
-  when: installer_check.rc != 0
+    force: true
+  when: local_ocp_version != remote_ocp_version
 
 - name: Install openshift-install
   ansible.builtin.unarchive:
@@ -26,7 +46,7 @@
     remote_src: true
     mode: "0755"
   become: true
-  when: installer_check.rc != 0
+  when: local_ocp_version != remote_ocp_version
 
 - name: Install oc client
   ansible.builtin.unarchive:
@@ -35,7 +55,7 @@
     remote_src: true
     mode: "0755"
   become: true
-  when: installer_check.rc != 0
+  when: local_ocp_version != remote_ocp_version
 
 - name: Verify openshift-install version
   ansible.builtin.command: "{{ installer_binary }} version"
