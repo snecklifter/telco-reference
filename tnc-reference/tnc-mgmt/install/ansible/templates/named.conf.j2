@@ -29,10 +29,3 @@ zone "{{ zone }}" IN {
 };
 
 {% endfor %}
-{% for zone in networking.extra_zones | default([]) %}
-zone "{{ zone.name }}" IN {
-    type primary;
-    file "/var/named/zones/{{ zone.name }}.zone";
-};
-
-{% endfor %}
