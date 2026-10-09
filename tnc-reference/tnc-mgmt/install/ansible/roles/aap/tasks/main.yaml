@@ -82,7 +82,7 @@
     --from-literal=host=aap-postgres-rw
     --from-literal=port=5432
     --from-literal=database={{ item.database }}
-    --from-literal=username={{ item.database }}
+    --from-literal=username={{ aap_db_username }}
     --from-literal=password={{ aap_db_password }}
     --from-literal=sslmode=prefer
     --from-literal=type=unmanaged
@@ -227,26 +227,11 @@
   delay: 15
   changed_when: false
 
-- name: Create per-component database users
-  ansible.builtin.shell: |
-    oc --kubeconfig {{ kubeconfig_path }} \
-      -n aap exec aap-postgres-1 -- psql -U postgres -c \
-      "DO \$\$ BEGIN
-        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ item.user }}') THEN
-          CREATE ROLE {{ item.user }} WITH LOGIN PASSWORD '{{ aap_db_password }}';
-        END IF;
-        GRANT ALL PRIVILEGES ON DATABASE {{ item.database }} TO {{ item.user }};
-      END \$\$;"
-  loop:
-    - user: automationcontroller
-      database: automationcontroller
-    - user: automationhub
-      database: automationhub
-    - user: eda
-      database: eda
-  loop_control:
-    label: "{{ item.user }}"
-  no_log: true
+- name: Grant CREATEROLE to AAP database user
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap exec aap-postgres-1 -- psql -U postgres -c
+    "ALTER ROLE {{ aap_db_username }} CREATEROLE;"
 
 # --- Deploy AAP ---
 
