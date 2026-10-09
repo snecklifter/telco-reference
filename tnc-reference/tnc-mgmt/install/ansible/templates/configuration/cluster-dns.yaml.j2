@@ -71,7 +71,7 @@ data:
                 86400       ; minimum TTL
             )
     @       IN  NS  ns1
-    ns1     IN  A   {{ networking.dns_vip }}
+    ns1     IN  A   {{ networking.dns_network.vip }}
 {% if zone == cluster.name + '.' + cluster.base_domain %}
     api     IN  A   {{ networking.api_vip }}
     api-int IN  A   {{ networking.api_vip }}
@@ -95,7 +95,7 @@ data:
                 86400       ; minimum TTL
             )
     @       IN  NS  ns1
-    ns1     IN  A   {{ networking.dns_vip }}
+    ns1     IN  A   {{ networking.dns_network.vip }}
 {% for record in zone.records %}
     {{ record.name }}    IN  {{ record.type }}   {{ record.value }}
 {% endfor %}
@@ -185,7 +185,7 @@ metadata:
   namespace: dns
   annotations:
     metallb.io/allow-shared-ip: dns
-    metallb.io/loadBalancerIPs: {{ networking.dns_vip }}
+    metallb.io/loadBalancerIPs: {{ networking.dns_network.vip }}
 spec:
   type: LoadBalancer
   selector:
@@ -203,7 +203,7 @@ metadata:
   namespace: dns
   annotations:
     metallb.io/allow-shared-ip: dns
-    metallb.io/loadBalancerIPs: {{ networking.dns_vip }}
+    metallb.io/loadBalancerIPs: {{ networking.dns_network.vip }}
 spec:
   type: LoadBalancer
   selector:

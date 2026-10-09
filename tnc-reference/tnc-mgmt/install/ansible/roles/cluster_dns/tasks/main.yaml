@@ -58,7 +58,7 @@
 - name: Verify cluster DNS resolves api record
   ansible.builtin.command: >
     dig +short api.{{ cluster.name }}.{{ cluster.base_domain }}
-    @{{ networking.dns_vip }}
+    @{{ networking.dns_network.vip }}
   register: cluster_dns_check
   changed_when: false
   failed_when: networking.api_vip not in cluster_dns_check.stdout
@@ -67,7 +67,7 @@
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
     patch dns.operator.openshift.io default --type merge
-    -p '{"spec":{"upstreamResolvers":{"upstreams":[{"type":"Network","address":"{{ networking.dns_vip }}","port":53}]}}}'
+    -p '{"spec":{"upstreamResolvers":{"upstreams":[{"type":"Network","address":"{{ networking.dns_network.vip }}","port":53}]}}}'
 
 - name: Wait for DNS operator rollout
   ansible.builtin.command: >
@@ -78,7 +78,7 @@
 - name: Cluster DNS ready
   ansible.builtin.debug:
     msg:
-      - "Cluster DNS: {{ networking.dns_vip }}"
+      - "Cluster DNS: {{ networking.dns_network.vip }}"
       - "Zones: {{ dns_zones | join(', ') }}"
       - "Upstream forwarder: configured"
       - "Bastion DNS can now be decommissioned"

@@ -11,8 +11,11 @@ networking:
   service_network_cidr: 172.30.0.0/16
   api_vip: 172.31.61.4
   ingress_vip: 172.31.61.5
-  dns_vip: 172.31.61.6
-  metallb_pool: 172.31.61.6-172.31.61.8
+  dns_network:
+    vlan_id: 63
+    cidr: 172.31.63.0/24
+    vip: 172.31.63.2
+    gateway: 172.31.63.1
 
   mtu: 8950
   bond_mode: "802.3ad"
@@ -371,6 +374,7 @@ hosts:
     #   - /dev/nvme3n1
     ip: 172.31.61.20
     storage_ip: 172.31.62.20
+    dns_ip: 172.31.63.20
     bmc_address: 192.168.1.103
     bmc_username: admin
     bmc_password: REDACTED
@@ -384,6 +388,7 @@ hosts:
     role: worker
     ip: 172.31.61.21
     storage_ip: 172.31.62.21
+    dns_ip: 172.31.63.21
     bmc_address: 192.168.1.104
     bmc_username: admin
     bmc_password: REDACTED
@@ -397,6 +402,7 @@ hosts:
     role: worker
     ip: 172.31.61.22
     storage_ip: 172.31.62.22
+    dns_ip: 172.31.63.22
     bmc_address: 192.168.1.105
     bmc_username: admin
     bmc_password: REDACTED

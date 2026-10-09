@@ -100,6 +100,22 @@ hosts:
           enabled: false
 {% endif %}
 {% endif %}
+{% if networking.dns_network is defined and host.dns_ip is defined %}
+      - name: bond0.{{ networking.dns_network.vlan_id }}
+        type: vlan
+        state: up
+        mtu: {{ networking.mtu }}
+        vlan:
+          base-iface: bond0
+          id: {{ networking.dns_network.vlan_id }}
+        ipv4:
+          address:
+          - ip: {{ host.dns_ip }}
+            prefix-length: {{ networking.dns_network.cidr.split('/')[1] }}
+          enabled: true
+        ipv6:
+          enabled: false
+{% endif %}
 {% for layout in host_layout %}
       - name: {{ layout.name }}
         type: ethernet
