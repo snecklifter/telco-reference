@@ -227,11 +227,11 @@
   delay: 15
   changed_when: false
 
-- name: Grant CREATEROLE to AAP database user
+- name: Grant SUPERUSER to AAP database user
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
     -n aap exec aap-postgres-1 -- psql -U postgres -c
-    "ALTER ROLE {{ aap_db_username }} CREATEROLE;"
+    "ALTER ROLE {{ aap_db_username }} SUPERUSER;"
 
 # --- Deploy AAP ---
 
