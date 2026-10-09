@@ -40,6 +40,23 @@
   delay: 10
   changed_when: false
 
+- name: Wait for MetalLB webhook to be ready
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n metallb-system get deployment metallb-operator-webhook-server
+  register: metallb_webhook
+  until: metallb_webhook.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+
+- name: Wait for MetalLB webhook deployment to be available
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n metallb-system wait --for=condition=Available
+    deployment/metallb-operator-webhook-server --timeout=300s
+  changed_when: false
+
 - name: Create MetalLB instance and address pool
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
