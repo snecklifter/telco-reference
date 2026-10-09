@@ -233,6 +233,12 @@
     -n aap exec aap-postgres-1 -- psql -U postgres -c
     "ALTER ROLE {{ aap_db_username }} SUPERUSER;"
 
+- name: Install hstore extension in automationhub database
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n aap exec aap-postgres-1 -- psql -U postgres -d automationhub -c
+    "CREATE EXTENSION IF NOT EXISTS hstore;"
+
 # --- Deploy AAP ---
 
 - name: Deploy Ansible Automation Platform

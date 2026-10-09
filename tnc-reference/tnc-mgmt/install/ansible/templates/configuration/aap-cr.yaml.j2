@@ -23,8 +23,7 @@ spec:
     replicas: {{ configuration.aap.hub_replicas | default(2) }}
     object_storage_s3_secret: aap-galaxy-object-storage
     storage_type: S3
-    database:
-      database_secret: aap-hub-db
+    postgres_configuration_secret: aap-hub-db
   eda:
     disabled: false
     database:
