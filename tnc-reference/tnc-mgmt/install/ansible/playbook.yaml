@@ -12,12 +12,15 @@
     build_dir: "{{ playbook_dir }}/../build"
     dns_dir: /opt/dns
     extra_manifests_dir: "{{ playbook_dir }}/../openshift/openshift"
+    kubeconfig_path: "{{ build_dir }}/auth/kubeconfig"
     installer_binary: openshift-install
     raid_enabled: "{{ storage is defined and storage.os_disks is defined and storage.os_disks | length > 1 }}"
     disconnected: "{{ mirror_registry is defined }}"
     ignition_spec_version: "3.5.0"
 
   roles:
+    - role: backup
+      tags: [install, backup]
     - bmc_harden
     - validate
     - prerequisites

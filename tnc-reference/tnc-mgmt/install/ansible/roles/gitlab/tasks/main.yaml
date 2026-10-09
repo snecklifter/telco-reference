@@ -209,3 +209,8 @@
   loop_control:
     label: "{{ item.dest | basename }}"
   no_log: true
+
+# --- Restore from backup if available ---
+
+- name: Check and restore GitLab from backup
+  ansible.builtin.include_tasks: restore.yaml

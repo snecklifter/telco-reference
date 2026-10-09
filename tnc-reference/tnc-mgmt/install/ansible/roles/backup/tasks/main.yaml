@@ -1,0 +1,102 @@
+---
+- name: Check if kubeconfig exists
+  ansible.builtin.stat:
+    path: "{{ kubeconfig_path }}"
+  register: kubeconfig_stat
+
+- name: Skip backup if no existing cluster
+  ansible.builtin.meta: end_host
+  when: not kubeconfig_stat.stat.exists
+
+- name: Check if GitLab is running
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n gitlab-system get gitlab gitlab
+    -o jsonpath='{.status.phase}'
+  register: gitlab_status
+  failed_when: false
+  changed_when: false
+
+- name: Skip backup if GitLab is not running
+  ansible.builtin.meta: end_host
+  when: gitlab_status.rc != 0 or gitlab_status.stdout != "Running"
+
+- name: Create backup directory
+  ansible.builtin.file:
+    path: /opt/backups
+    state: directory
+    mode: "0750"
+  become: true
+
+- name: Set backup directory ownership
+  ansible.builtin.file:
+    path: /opt/backups
+    owner: "{{ lookup('env', 'USER') }}"
+    recurse: true
+  become: true
+
+# --- GitLab application backup ---
+
+- name: Create GitLab application backup
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n gitlab-system exec deploy/gitlab-toolbox --
+    gitlab-backup-create SKIP=registry
+  register: gitlab_backup
+  timeout: 1800
+
+- name: Get latest backup filename
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n gitlab-system exec deploy/gitlab-toolbox --
+    ls -t /srv/gitlab/tmp/backups/
+  register: backup_files
+
+- name: Set backup filename
+  ansible.builtin.set_fact:
+    gitlab_backup_file: "{{ backup_files.stdout_lines[0] }}"
+
+- name: Copy GitLab backup to bastion
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n gitlab-system cp
+    gitlab-toolbox-0:/srv/gitlab/tmp/backups/{{ gitlab_backup_file }}
+    /opt/backups/{{ gitlab_backup_file }}
+  timeout: 1800
+
+# --- CNPG database backup ---
+
+- name: Find CNPG primary pod
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n gitlab-system get pods -l role=primary,cnpg.io/cluster=gitlab-postgres
+    --no-headers -o custom-columns=NAME:.metadata.name
+  register: cnpg_primary
+
+- name: Dump GitLab database
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n gitlab-system exec {{ cnpg_primary.stdout_lines[0] }} -c postgres --
+    pg_dump -U {{ configuration.gitlab.psql.username }} -Fc {{ configuration.gitlab.psql.database }}
+    > /opt/backups/gitlab-db.dump
+  no_log: true
+  timeout: 1800
+
+# --- GitLab secrets ---
+
+- name: Export GitLab secrets
+  ansible.builtin.shell: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n gitlab-system get secret {{ item }} -o yaml
+    > /opt/backups/{{ item }}.yaml
+  loop:
+    - gitlab-rails-secret
+    - gitlab-gitlab-initial-root-password
+  failed_when: false
+
+- name: Backup complete
+  ansible.builtin.debug:
+    msg:
+      - "GitLab backup: /opt/backups/{{ gitlab_backup_file }}"
+      - "Database dump: /opt/backups/gitlab-db.dump"
+      - "Secrets exported to /opt/backups/"

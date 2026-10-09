@@ -1,0 +1,105 @@
+---
+- name: Check for GitLab database backup
+  ansible.builtin.stat:
+    path: /opt/backups/gitlab-db.dump
+  register: db_backup
+
+- name: Check for GitLab application backup
+  ansible.builtin.find:
+    paths: /opt/backups
+    patterns: "*_gitlab_backup.tar"
+  register: app_backup
+
+- name: Skip restore if no backups found
+  ansible.builtin.debug:
+    msg: "No GitLab backups found at /opt/backups/ — fresh install"
+  when: not db_backup.stat.exists and app_backup.files | length == 0
+
+- name: Restore GitLab from backup
+  when: db_backup.stat.exists or app_backup.files | length > 0
+  block:
+    - name: Restore GitLab secrets
+      ansible.builtin.command: >
+        oc --kubeconfig {{ kubeconfig_path }}
+        apply -f /opt/backups/{{ item }}.yaml
+      loop:
+        - gitlab-rails-secret
+        - gitlab-gitlab-initial-root-password
+      failed_when: false
+
+    - name: Scale down GitLab for restore
+      ansible.builtin.command: >
+        oc --kubeconfig {{ kubeconfig_path }}
+        -n gitlab-system scale gitlab gitlab --replicas=0
+      failed_when: false
+
+    - name: Wait for GitLab pods to terminate
+      ansible.builtin.shell: >
+        oc --kubeconfig {{ kubeconfig_path }}
+        -n gitlab-system get pods -l app.kubernetes.io/part-of=gitlab
+        --no-headers 2>/dev/null | wc -l
+      register: gitlab_pods
+      until: (gitlab_pods.stdout | trim | int) == 0
+      retries: 30
+      delay: 10
+      changed_when: false
+      failed_when: false
+
+    - name: Find CNPG primary pod
+      ansible.builtin.command: >
+        oc --kubeconfig {{ kubeconfig_path }}
+        -n gitlab-system get pods -l role=primary,cnpg.io/cluster=gitlab-postgres
+        --no-headers -o custom-columns=NAME:.metadata.name
+      register: cnpg_primary
+
+    - name: Restore database from backup
+      ansible.builtin.shell: >
+        oc --kubeconfig {{ kubeconfig_path }}
+        -n gitlab-system exec -i {{ cnpg_primary.stdout_lines[0] }} -c postgres --
+        pg_restore -U {{ configuration.gitlab.psql.username }}
+        -d {{ configuration.gitlab.psql.database }}
+        --no-owner --no-privileges --clean --if-exists
+        < /opt/backups/gitlab-db.dump
+      register: pg_restore_result
+      failed_when: pg_restore_result.rc > 1
+      no_log: true
+      timeout: 1800
+      when: db_backup.stat.exists
+
+    - name: Scale GitLab back up
+      ansible.builtin.command: >
+        oc --kubeconfig {{ kubeconfig_path }}
+        -n gitlab-system scale gitlab gitlab
+        --replicas={{ configuration.gitlab.replicas }}
+
+    - name: Wait for GitLab to be running after restore
+      ansible.builtin.command: >
+        oc --kubeconfig {{ kubeconfig_path }}
+        -n gitlab-system get gitlab gitlab
+        -o jsonpath='{.status.phase}'
+      register: gitlab_phase
+      until: gitlab_phase.stdout == "Running"
+      retries: 60
+      delay: 30
+      changed_when: false
+
+    - name: Copy application backup to toolbox
+      ansible.builtin.shell: >
+        oc --kubeconfig {{ kubeconfig_path }}
+        -n gitlab-system cp
+        {{ (app_backup.files | sort(attribute='mtime', reverse=true) | first).path }}
+        deploy/gitlab-toolbox:/srv/gitlab/tmp/backups/
+      timeout: 1800
+      when: app_backup.files | length > 0
+
+    - name: Restore GitLab application data
+      ansible.builtin.shell: >
+        oc --kubeconfig {{ kubeconfig_path }}
+        -n gitlab-system exec deploy/gitlab-toolbox --
+        gitlab-backup-restore force=yes
+      timeout: 3600
+      when: app_backup.files | length > 0
+
+    - name: Restore complete
+      ansible.builtin.debug:
+        msg: "GitLab restored from backup"
