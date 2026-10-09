@@ -61,6 +61,10 @@
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
     apply -f {{ config_stage_dir }}/metallb-config.yaml
+  register: metallb_config_result
+  until: metallb_config_result.rc == 0
+  retries: 5
+  delay: 15
 
 - name: Wait for MetalLB controller deployment to exist
   ansible.builtin.command: >
