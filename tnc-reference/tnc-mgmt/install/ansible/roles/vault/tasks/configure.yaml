@@ -144,11 +144,9 @@
     -n vault exec vault-0 --
     sh -c 'VAULT_TOKEN={{ vault_root_token }}
     vault kv get -format=json {{ configuration.vault.secret_path }}/keycloak/clients/{{ item }}'
-  loop:
-    - openshift
-    - gitlab
-    - netbox
-    - aap
+  loop: >-
+    {{ ['gitlab', 'netbox', 'aap', configuration.keycloak.client_id]
+       + (configuration.keycloak.additional_hub_clusters | default([]) | map(attribute='name') | list) }}
   register: vault_client_checks
   failed_when: false
   changed_when: false

@@ -1,6 +1,6 @@
 ---
 cluster:
-  name: mgmt1
+  name: hub01
   base_domain: example.com
   ocp_version: stable-4.22
 
@@ -168,6 +168,23 @@ configuration:
   keycloak:
     realm: openshift
     replicas: 2
+
+    # OIDC client for THIS cluster -- the hub the playbook is deploying. The
+    # client is created in the realm, its secret is synced into openshift-config
+    # and the cluster OAuth CR is pointed at it. Redirect URIs come from
+    # cluster.name / cluster.base_domain, so set cluster.name to this hub.
+    client_id: hub01
+
+    # Further hub clusters sharing this Keycloak. Their OIDC clients are created
+    # in the realm and their secrets generated into Vault at
+    # <vault.secret_path>/keycloak/clients/<name> -- and that is all this
+    # playbook does for them. Each hub is responsible for its own ExternalSecret
+    # and OAuth CR reading that path. Redirect URIs are derived as
+    # apps.<name>.<base_domain>; set base_domain per entry to override
+    # cluster.base_domain.
+    additional_hub_clusters:
+      - name: hub02
+
     postgres:
       instances: 3
       storage_size: "10Gi"

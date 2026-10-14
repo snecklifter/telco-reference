@@ -9,7 +9,7 @@ spec:
       mappingMethod: claim
       type: OpenID
       openID:
-        clientID: openshift
+        clientID: {{ configuration.keycloak.client_id }}
         clientSecret:
           name: keycloak-openshift-client-secret
         issuer: https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/{{ configuration.keycloak.realm }}
@@ -20,3 +20,5 @@ spec:
             - name
           email:
             - email
+          groups:
+            - groups

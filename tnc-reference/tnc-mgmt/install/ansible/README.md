@@ -25,7 +25,7 @@ Automated end-to-end deployment of an OpenShift 4.22 management (hub) cluster on
 | **Cluster DNS** | Deploys HA BIND DNS inside the cluster on a dedicated VLAN with MetalLB load balancing, replaces bastion DNS |
 | **Vault** | Deploys Vault Enterprise (Helm), initializes, unseals, configures KV engine and Kubernetes auth, installs External Secrets Operator |
 | **cert-manager** | Installs cert-manager, DNS webhook solver, issues Let's Encrypt wildcard and API certificates, updates kubeconfig |
-| **Keycloak** | Deploys RHBK with CNPG HA database, creates SSO realm with OIDC clients for OpenShift, GitLab, NetBox, and AAP |
+| **Keycloak** | Deploys RHBK with CNPG HA database, creates SSO realm with OIDC clients for this hub (`configuration.keycloak.client_id`), GitLab, NetBox, AAP, plus a client per entry in `configuration.keycloak.additional_hub_clusters` |
 | **NetBox** | Deploys NetBox via Helm with CNPG database, Keycloak SSO with JWKS token verification, S3 backups |
 | **AAP** | Deploys Ansible Automation Platform (Controller, Hub, EDA) with shared CNPG database (4 databases), S3 storage for Hub |
 | **GitLab** | Deploys GitLab operator with CNPG database, Redis, creates Routes, initializes repo, restores from backup if available |
