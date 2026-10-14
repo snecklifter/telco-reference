@@ -18,11 +18,12 @@ spec:
     editUsernameAllowed: false
     bruteForceProtected: true
     clients:
-      - clientId: openshift
-        name: OpenShift
+      # This cluster -- OAuth CR and client secret are configured by the playbook
+      - clientId: {{ configuration.keycloak.client_id }}
+        name: {{ configuration.keycloak.client_id }}
         enabled: true
         clientAuthenticatorType: client-secret
-        secret: {{ keycloak_openshift_client_secret }}
+        secret: {{ keycloak_cluster_client_secret }}
         redirectUris:
           - "https://oauth-openshift.apps.{{ cluster.name }}.{{ cluster.base_domain }}/oauth2callback/keycloak"
         webOrigins:
@@ -35,6 +36,27 @@ spec:
           - openid
           - profile
           - email
+{% for hub in configuration.keycloak.additional_hub_clusters | default([]) %}
+{% set hub_domain = hub.base_domain | default(cluster.base_domain) %}
+      # Other hub -- client only; that cluster wires up its own OAuth CR
+      - clientId: {{ hub.name }}
+        name: {{ hub.display_name | default(hub.name) }}
+        enabled: true
+        clientAuthenticatorType: client-secret
+        secret: {{ keycloak_hub_client_secrets[hub.name] }}
+        redirectUris:
+          - "https://oauth-openshift.apps.{{ hub.name }}.{{ hub_domain }}/oauth2callback/keycloak"
+        webOrigins:
+          - "https://console-openshift-console.apps.{{ hub.name }}.{{ hub_domain }}"
+        standardFlowEnabled: true
+        directAccessGrantsEnabled: false
+        publicClient: false
+        protocol: openid-connect
+        defaultClientScopes:
+          - openid
+          - profile
+          - email
+{% endfor %}
       - clientId: gitlab
         name: GitLab
         enabled: true
@@ -78,6 +100,23 @@ spec:
           - "https://aap.apps.{{ cluster.name }}.{{ cluster.base_domain }}/social/complete/oidc/"
         webOrigins:
           - "https://aap.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
+        standardFlowEnabled: true
+        directAccessGrantsEnabled: false
+        publicClient: false
+        protocol: openid-connect
+        defaultClientScopes:
+          - openid
+          - profile
+          - email
+      - clientId: vault
+        name: Vault
+        enabled: true
+        clientAuthenticatorType: client-secret
+        secret: {{ keycloak_aap_client_secret }}
+        redirectUris:
+          - "https://vault.apps.{{ cluster.name }}.{{ cluster.base_domain }}/social/complete/oidc/"
+        webOrigins:
+          - "https://vault.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
         standardFlowEnabled: true
         directAccessGrantsEnabled: false
         publicClient: false

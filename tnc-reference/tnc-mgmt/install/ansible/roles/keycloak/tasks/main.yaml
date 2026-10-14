@@ -133,13 +133,14 @@
 
 # --- Realm with OIDC clients ---
 
-- name: Read OpenShift OIDC client secret from Vault
+- name: Read this cluster's OIDC client secret from Vault
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
     -n vault exec vault-0 --
     sh -c 'VAULT_TOKEN={{ vault_root_token }}
-    vault kv get -field=secret {{ configuration.vault.secret_path }}/keycloak/clients/openshift'
-  register: vault_openshift_secret
+    vault kv get -field=secret
+    {{ configuration.vault.secret_path }}/keycloak/clients/{{ configuration.keycloak.client_id }}'
+  register: vault_cluster_client_secret
   no_log: true
 
 - name: Read GitLab OIDC client secret from Vault
@@ -169,16 +170,31 @@
   register: vault_aap_secret
   no_log: true
 
+- name: Read additional hub cluster OIDC client secrets from Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv get -field=secret {{ configuration.vault.secret_path }}/keycloak/clients/{{ item.name }}'
+  register: vault_hub_secrets
+  loop: "{{ configuration.keycloak.additional_hub_clusters | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
 - name: Render and apply Keycloak realm import
   ansible.builtin.template:
     src: configuration/keycloak-realm-import.yaml.j2
     dest: "{{ config_stage_dir }}/keycloak-realm-import.yaml"
     mode: "0640"
   vars:
-    keycloak_openshift_client_secret: "{{ vault_openshift_secret.stdout }}"
+    keycloak_cluster_client_secret: "{{ vault_cluster_client_secret.stdout }}"
     keycloak_gitlab_client_secret: "{{ vault_gitlab_secret.stdout }}"
     keycloak_netbox_client_secret: "{{ vault_netbox_secret.stdout }}"
     keycloak_aap_client_secret: "{{ vault_aap_secret.stdout }}"
+    keycloak_hub_client_secrets: >-
+      {{ dict(vault_hub_secrets.results | map(attribute='item.name')
+              | zip(vault_hub_secrets.results | map(attribute='stdout'))) }}
   no_log: true
 
 - name: Apply Keycloak realm import
@@ -209,5 +225,10 @@
     msg:
       - "Keycloak: https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
       - "Realm: {{ configuration.keycloak.realm }}"
-      - "OpenShift OAuth: configured"
+      - "OpenShift OAuth: configured with client {{ configuration.keycloak.client_id }}"
       - "GitLab OIDC: configured"
+      - >-
+        Clients created for other hubs (not configured here):
+        {{ configuration.keycloak.additional_hub_clusters | default([])
+        | map(attribute='name') | join(', ') | default('none', true) }}
+        -- secrets in Vault under {{ configuration.vault.secret_path }}/keycloak/clients/
