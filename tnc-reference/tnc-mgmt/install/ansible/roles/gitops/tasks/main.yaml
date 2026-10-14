@@ -36,6 +36,31 @@
     deployment/openshift-gitops-server --timeout=300s
   changed_when: false
 
+# ArgoCD has its own RBAC and OpenShift cluster-admin does not carry into it.
+# The stock policy only maps the system:cluster-admins and cluster-admins
+# groups, so a user holding cluster-admin through a direct ClusterRoleBinding
+# matches nothing and the UI renders empty rather than erroring.
+- name: Grant ArgoCD admin to the configured OpenShift groups
+  ansible.builtin.command:
+    argv:
+      - oc
+      - --kubeconfig
+      - "{{ kubeconfig_path }}"
+      - -n
+      - openshift-gitops
+      - patch
+      - argocd
+      - openshift-gitops
+      - --type=merge
+      - -p
+      - "{{ {'spec': {'rbac': {'scopes': '[groups]', 'policy': argocd_rbac_policy}}} | to_json }}"
+  vars:
+    argocd_admin_groups: >-
+      {{ ['system:cluster-admins', 'cluster-admins']
+         + (configuration.gitops.admin_groups | default([])) }}
+    argocd_rbac_policy: "{% for group in argocd_admin_groups %}g, {{ group }}, role:admin\n{% endfor %}"
+  when: configuration.gitops.admin_groups | default([]) | length > 0
+
 - name: Wait for MultiClusterHub to be running
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
@@ -53,6 +78,8 @@
     oc --kubeconfig {{ kubeconfig_path }}
     get crd policies.policy.open-cluster-management.io
     placements.cluster.open-cluster-management.io
+    managedclustersetbindings.cluster.open-cluster-management.io
+    gitopsclusters.apps.open-cluster-management.io
   register: acm_crds
   until: acm_crds.rc == 0
   retries: 30
@@ -60,10 +87,94 @@
   changed_when: false
   when: "'acm' in configuration.components"
 
+# The GitOpsCluster in other-crs/required/acm-gitops builds its ArgoCD cluster
+# secrets from a ManagedServiceAccount token, so the addon has to be on before
+# the kustomize apply creates it -- otherwise it selects clusters but never
+# produces a secret and nothing shows up in the ArgoCD UI.
+- name: Enable the ManagedServiceAccount addon
+  when: "'acm' in configuration.components"
+  block:
+    - name: Read MultiClusterEngine components
+      ansible.builtin.command: >
+        oc --kubeconfig {{ kubeconfig_path }}
+        get multiclusterengine multiclusterengine
+        -o jsonpath='{.spec.overrides.components}'
+      register: mce_components
+      changed_when: false
+
+    - name: Check whether the ManagedServiceAccount addon is enabled
+      ansible.builtin.set_fact:
+        msa_enabled_count: >-
+          {{ mce_components.stdout | default('[]', true) | from_json
+             | selectattr('name', 'equalto', 'managedserviceaccount')
+             | selectattr('enabled') | list | length }}
+        mce_components_patched: >-
+          {{ (mce_components.stdout | default('[]', true) | from_json
+              | rejectattr('name', 'equalto', 'managedserviceaccount') | list)
+             + [{'name': 'managedserviceaccount', 'enabled': true}] }}
+
+    - name: Turn on the ManagedServiceAccount addon
+      ansible.builtin.command:
+        argv:
+          - oc
+          - --kubeconfig
+          - "{{ kubeconfig_path }}"
+          - patch
+          - multiclusterengine
+          - multiclusterengine
+          - --type=merge
+          - -p
+          - "{{ {'spec': {'overrides': {'components': mce_components_patched}}} | to_json }}"
+      when: msa_enabled_count | int == 0
+
 - name: Apply full configuration via kustomize
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
     apply -k {{ config_stage_dir }}
+
+# --- Verify the ACM managed clusters reached ArgoCD ---
+
+- name: Verify ACM cluster registration in ArgoCD
+  when: "'acm' in configuration.components"
+  vars:
+    argo_ns: openshift-gitops
+    placement_name: all-openshift-clusters
+  block:
+    - name: Wait for Placement to select clusters
+      ansible.builtin.command: >
+        oc --kubeconfig {{ kubeconfig_path }}
+        -n {{ argo_ns }} get placement {{ placement_name }}
+        -o jsonpath='{.status.numberOfSelectedClusters}'
+      register: placement_count
+      until: placement_count.stdout | int > 0
+      retries: 12
+      delay: 10
+      failed_when: false
+      changed_when: false
+
+    - name: Warn when the Placement matched no clusters
+      ansible.builtin.debug:
+        msg: >-
+          Placement {{ placement_name }} selected no clusters. Check that the
+          managed clusters carry the vendor=OpenShift label and are members of
+          the global cluster set:
+          oc get managedcluster -L cluster.open-cluster-management.io/clusterset,vendor
+      when: placement_count.stdout | int == 0
+
+    - name: Read ArgoCD cluster secrets created by the GitOpsCluster
+      ansible.builtin.command: >
+        oc --kubeconfig {{ kubeconfig_path }}
+        -n {{ argo_ns }} get secrets
+        -l argocd.argoproj.io/secret-type=cluster
+        -o jsonpath='{.items[*].metadata.name}'
+      register: argo_cluster_secrets
+      changed_when: false
+
+    - name: ArgoCD cluster registration
+      ansible.builtin.debug:
+        msg:
+          - "Clusters selected by Placement: {{ placement_count.stdout | default('0') }}"
+          - "ArgoCD cluster secrets: {{ argo_cluster_secrets.stdout | default('none', true) }}"
 
 - name: Deployment complete
   ansible.builtin.debug:

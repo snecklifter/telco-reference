@@ -17,6 +17,11 @@ resources:
 {% if 'acm' in configuration.components %}
   - overlays/acm/
 {% endif %}
+{% if 'acm' in configuration.components and 'gitops' in configuration.components %}
+  # Registers the ACM managed clusters with ArgoCD. Needs both components: the
+  # CRDs come from ACM, the target namespace from GitOps.
+  - other-crs/required/acm-gitops/
+{% endif %}
 {% if 'registry' in configuration.components %}
   - overlays/registry/
 {% endif %}

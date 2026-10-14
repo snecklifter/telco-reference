@@ -1,0 +1,24 @@
+---
+# Selects which managed clusters get registered with ArgoCD. vendor=OpenShift
+# covers every OpenShift cluster including local-cluster. The tolerations keep
+# clusters in the decision while they are briefly unreachable, so a network
+# blip does not deregister them from ArgoCD.
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: all-openshift-clusters
+  namespace: openshift-gitops
+spec:
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchExpressions:
+            - key: vendor
+              operator: In
+              values:
+                - OpenShift
+  tolerations:
+    - key: cluster.open-cluster-management.io/unreachable
+      operator: Exists
+    - key: cluster.open-cluster-management.io/unavailable
+      operator: Exists

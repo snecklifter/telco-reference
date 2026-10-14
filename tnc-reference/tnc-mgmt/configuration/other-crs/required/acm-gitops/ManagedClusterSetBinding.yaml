@@ -1,0 +1,13 @@
+---
+# Binds the global managed cluster set into the ArgoCD namespace. A Placement
+# can only select from cluster sets bound to its own namespace, and `global` is
+# bound by default only to open-cluster-management-global-set, so without this
+# the Placement resolves to zero clusters and no ArgoCD cluster secrets are
+# created. The name must match spec.clusterSet.
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: global
+  namespace: openshift-gitops
+spec:
+  clusterSet: global

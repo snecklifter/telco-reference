@@ -244,6 +244,16 @@ configuration:
   gitops:
     branch: tnc7.0-release-4.22
 
+    # OpenShift groups granted ArgoCD admin. ArgoCD RBAC is separate from
+    # OpenShift RBAC: the stock policy only maps system:cluster-admins and
+    # cluster-admins, so holding cluster-admin through a ClusterRoleBinding on
+    # your user grants nothing in the ArgoCD UI, which then renders empty.
+    # Those two groups are always kept; list any extra ones here. Membership
+    # reaches OpenShift through the Keycloak groups claim, so the group has to
+    # exist as an OpenShift Group for this to take effect.
+    admin_groups:
+      - my-admins
+
   # ODF / LSO storage on worker nodes
   odf:
     disk_paths:

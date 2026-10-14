@@ -1,0 +1,21 @@
+---
+# Turns the placement decision into ArgoCD cluster secrets in argoNamespace,
+# which is what makes the managed clusters appear as deployment targets in
+# ArgoCD. The referenced Placement must live in the same namespace as this
+# resource. The token in the generated secret comes from the
+# ManagedServiceAccount addon, which the gitops role enables on the
+# MultiClusterEngine before this is applied.
+apiVersion: apps.open-cluster-management.io/v1beta1
+kind: GitOpsCluster
+metadata:
+  name: argo-acm-importer
+  namespace: openshift-gitops
+spec:
+  argoServer:
+    argoNamespace: openshift-gitops
+    cluster: local-cluster
+  placementRef:
+    apiVersion: cluster.open-cluster-management.io/v1beta1
+    kind: Placement
+    name: all-openshift-clusters
+    namespace: openshift-gitops

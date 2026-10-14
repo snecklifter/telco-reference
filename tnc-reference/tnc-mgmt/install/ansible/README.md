@@ -29,7 +29,7 @@ Automated end-to-end deployment of an OpenShift 4.22 management (hub) cluster on
 | **NetBox** | Deploys NetBox via Helm with CNPG database, Keycloak SSO with JWKS token verification, S3 backups |
 | **AAP** | Deploys Ansible Automation Platform (Controller, Hub, EDA) with shared CNPG database (4 databases), S3 storage for Hub |
 | **GitLab** | Deploys GitLab operator with CNPG database, Redis, creates Routes, initializes repo, restores from backup if available |
-| **GitOps** | Installs OpenShift GitOps (ArgoCD), applies full kustomize configuration |
+| **GitOps** | Installs OpenShift GitOps (ArgoCD), grants ArgoCD admin to `configuration.gitops.admin_groups`, enables the ManagedServiceAccount addon, applies full kustomize configuration (including `other-crs/required/acm-gitops/`, which registers the ACM managed clusters with ArgoCD), verifies the clusters were registered |
 
 ### Security Features
 
