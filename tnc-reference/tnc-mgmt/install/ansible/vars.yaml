@@ -220,6 +220,12 @@ configuration:
     chart_version: "10.1.8"
     group: telco
     project: telco-reference
+    # The telco-reference git submodule is mirrored into its own project so the
+    # ArgoCD repo-server resolves it over HTTPS against this GitLab instead of
+    # git@github.com, which it cannot reach. Must differ from project above.
+    # Bumping the submodule needs no change here: the playbook mirrors whatever
+    # commit the superproject pins, under a pin/<sha> ref.
+    submodule_project: telco-reference-upstream
     replicas: 3
     pages_subdomain: docs
     registry_enabled: false

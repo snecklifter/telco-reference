@@ -71,6 +71,17 @@
   when: >-
     (item.component == '_always' or item.component in configuration.components)
     and (item.requires | default('') == '' or item.requires in configuration.components)
+  register: config_template_results
+
+# The committed copies of these files carry example values from another
+# cluster, so the tree pushed to GitLab for ArgoCD has to carry the rendered
+# versions instead -- see the gitlab role. Derive the list from what the loop
+# above actually rendered rather than restating it, so the two cannot drift.
+- name: Record which configuration files were rendered from templates
+  ansible.builtin.set_fact:
+    templated_config_files: >-
+      {{ config_template_results.results | rejectattr('skipped', 'defined')
+         | map(attribute='item.dest') | list }}
 
 - name: Find all YAML files in staging area reference-crs and other-crs
   ansible.builtin.find:

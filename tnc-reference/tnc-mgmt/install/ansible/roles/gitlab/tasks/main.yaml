@@ -100,10 +100,27 @@
 
 # --- Initialize GitLab (user, repo, push) ---
 
+# The configuration tree reaches the reference CRs through a reference-crs
+# symlink into the telco-reference submodule, so ArgoCD cannot render the app
+# without the submodule content. The committed .gitmodules points at
+# git@github.com, which the repo-server can neither authenticate nor reach --
+# it blocks on the SSH connect until manifest generation hits its deadline and
+# reports "context deadline exceeded". ArgoCD also runs submodule fetches with
+# the *parent* repository's credentials, so registering the submodule as its
+# own repository in ArgoCD has no effect. Mirror the submodule into GitLab
+# alongside the superproject and rewrite the URLs at push time, so both clones
+# are the same host with the same credentials.
 - name: Set GitLab facts
   ansible.builtin.set_fact:
     gitlab_host: "gitlab.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
     gitlab_repo_url: "https://gitlab.apps.{{ cluster.name }}.{{ cluster.base_domain }}/{{ configuration.gitlab.group }}/{{ configuration.gitlab.project }}.git"
+    gitlab_submodule_repo_url: "https://gitlab.apps.{{ cluster.name }}.{{ cluster.base_domain }}/{{ configuration.gitlab.group }}/{{ configuration.gitlab.submodule_project }}.git"
+    repo_root: "{{ (playbook_dir ~ '/../../../..') | realpath }}"
+    gitlab_push_worktree: "{{ build_dir }}/gitlab-push"
+
+- name: Set GitLab push paths
+  ansible.builtin.set_fact:
+    config_rel_dir: "{{ (config_src_dir | realpath) | relpath(repo_root) }}"
 
 - name: Wait for GitLab API
   ansible.builtin.uri:
@@ -167,7 +184,7 @@
   ansible.builtin.set_fact:
     gitlab_group_id: "{{ (gitlab_group.json.id | default(gitlab_group_existing.json.id)) }}"
 
-- name: Create GitLab project
+- name: Create GitLab projects
   ansible.builtin.uri:
     url: "https://{{ gitlab_host }}/api/v4/projects"
     method: POST
@@ -175,33 +192,29 @@
       PRIVATE-TOKEN: "{{ gitlab_pat }}"
     body_format: json
     body:
-      name: "{{ configuration.gitlab.project }}"
-      path: "{{ configuration.gitlab.project }}"
+      name: "{{ item }}"
+      path: "{{ item }}"
       namespace_id: "{{ gitlab_group_id }}"
       visibility: internal
       initialize_with_readme: false
     status_code: [200, 201]
     validate_certs: false
+  loop:
+    - "{{ configuration.gitlab.project }}"
+    - "{{ configuration.gitlab.submodule_project }}"
   ignore_errors: true
 
-- name: Push repo to GitLab
-  ansible.builtin.shell: |
-    git remote add gitlab-push "https://root:{{ gitlab_pat }}@{{ gitlab_host }}/{{ configuration.gitlab.group }}/{{ configuration.gitlab.project }}.git" 2>/dev/null || \
-    git remote set-url gitlab-push "https://root:{{ gitlab_pat }}@{{ gitlab_host }}/{{ configuration.gitlab.group }}/{{ configuration.gitlab.project }}.git"
-    GIT_SSL_NO_VERIFY=true git push gitlab-push HEAD:refs/heads/{{ configuration.gitops.branch }}
-    git remote remove gitlab-push
-  args:
-    chdir: "{{ playbook_dir }}/../../../.."
-  no_log: true
+# --- Render the GitOps patches before publishing, so the pushed tree agrees
+# --- with what this playbook applies locally
 
-- name: GitLab ready
-  ansible.builtin.debug:
-    msg:
-      - "GitLab: https://{{ gitlab_host }}"
-      - "Repo: {{ gitlab_repo_url }}"
-      - "Branch: {{ configuration.gitops.branch }}"
-
-# --- Re-template GitOps patches with real GitLab URL ---
+- name: Require the rendered file list from stage_config
+  ansible.builtin.assert:
+    that: templated_config_files is defined
+    fail_msg: >-
+      templated_config_files is unset, so the stage_config role did not run in
+      this play. Publishing now would push the committed example values and
+      hub-config would overwrite its own repoURL with the example one. Re-run
+      without skipping stage_config.
 
 - name: Template GitOps patches with GitLab credentials
   ansible.builtin.template:
@@ -225,7 +238,115 @@
       dest: overlays/gitops/ztp-repo-secret-patch.yaml
   loop_control:
     label: "{{ item.dest | basename }}"
+  register: gitops_template_results
   no_log: true
+
+- name: Add the GitOps patches to the rendered file list
+  ansible.builtin.set_fact:
+    templated_config_files: >-
+      {{ templated_config_files
+         + (gitops_template_results.results | map(attribute='item.dest') | list) }}
+
+# --- Publish to GitLab ---
+
+# The superproject push only carries gitlinks, so every pinned commit has to
+# exist in the mirror before ArgoCD checks it out, and has to be reachable
+# from an advertised ref or the repo-server cannot fetch it at all. Name the
+# refs after the SHA: that keeps the push append-only, so bumping the
+# submodule never invalidates an older pin you might roll back to, and no
+# branch name has to be tracked in vars.yaml.
+- name: Mirror the pinned telco-reference commits into GitLab
+  ansible.builtin.shell: |
+    set -eu
+    mirror="https://root:{{ gitlab_pat }}@{{ gitlab_host }}/{{ configuration.gitlab.group }}/{{ configuration.gitlab.submodule_project }}.git"
+    # Not named 'path': that is a special variable in some shells.
+    sm_paths="$(git config -f .gitmodules --get-regexp '^submodule\..*\.path$' | awk '{print $2}')"
+
+    for sha in $(git ls-tree -r HEAD | awk '$2 == "commit" { print $3 }' | sort -u); do
+      src=""
+      for sm in $sm_paths; do
+        if [ -e "$sm/.git" ] && git -C "$sm" cat-file -e "${sha}^{commit}" 2>/dev/null; then
+          src="$sm"
+          break
+        fi
+      done
+      if [ -z "$src" ]; then
+        echo "no submodule checkout contains pinned commit $sha" >&2
+        echo "run 'git submodule update --init --recursive' in {{ repo_root }}" >&2
+        exit 1
+      fi
+      GIT_SSL_NO_VERIFY=true git -C "$src" push "$mirror" "$sha:refs/heads/pin/$sha"
+    done
+  args:
+    chdir: "{{ repo_root }}"
+  no_log: true
+
+- name: Create a throwaway worktree for the GitLab push
+  ansible.builtin.shell: |
+    set -eu
+    worktree={{ gitlab_push_worktree | quote }}
+    git worktree remove --force "$worktree" 2>/dev/null || true
+    rm -rf "$worktree"
+    git worktree prune
+    git worktree add --detach --no-checkout "$worktree" HEAD
+    git -C "$worktree" checkout --no-recurse-submodules HEAD -- .
+  args:
+    chdir: "{{ repo_root }}"
+
+# ArgoCD syncs the same path this playbook applies with 'oc apply -k', but the
+# committed overlays hold example values from another cluster -- including a
+# repoURL that hub-config would use to overwrite its own source. Publish the
+# rendered versions so both paths converge on the same manifests.
+- name: Publish the rendered configuration instead of the committed examples
+  ansible.builtin.copy:
+    src: "{{ config_stage_dir }}/{{ item }}"
+    dest: "{{ gitlab_push_worktree }}/{{ config_rel_dir }}/{{ item }}"
+    mode: "0644"
+    remote_src: true
+  loop: "{{ templated_config_files }}"
+  loop_control:
+    label: "{{ item }}"
+
+# The commit reuses HEAD's author and committer dates, so an unchanged tree
+# re-renders the same SHA and ArgoCD does not see a new revision -- and
+# resync -- on every playbook run. The branch keys come out because the
+# mirror carries pin/<sha> refs rather than upstream's branch names.
+- name: Point the submodules at the GitLab mirror and push
+  ansible.builtin.shell: |
+    set -eu
+    worktree={{ gitlab_push_worktree | quote }}
+
+    for key in $(git -C "$worktree" config -f .gitmodules --name-only --get-regexp '^submodule\..*\.url$'); do
+      git -C "$worktree" config -f .gitmodules "$key" {{ gitlab_submodule_repo_url | quote }}
+    done
+    for key in $(git -C "$worktree" config -f .gitmodules --name-only --get-regexp '^submodule\..*\.branch$'); do
+      git -C "$worktree" config -f .gitmodules --unset "$key"
+    done
+    git -C "$worktree" add -A
+
+    GIT_AUTHOR_DATE="$(git -C "$worktree" log -1 --format=%aI HEAD)" \
+    GIT_COMMITTER_DATE="$(git -C "$worktree" log -1 --format=%cI HEAD)" \
+    git -C "$worktree" \
+      -c user.name="tnc-automation" \
+      -c user.email="tnc-automation@{{ gitlab_host }}" \
+      commit --quiet -m "Rendered configuration for {{ cluster.name }}.{{ cluster.base_domain }}"
+
+    GIT_SSL_NO_VERIFY=true git -C "$worktree" push --force \
+      "https://root:{{ gitlab_pat }}@{{ gitlab_host }}/{{ configuration.gitlab.group }}/{{ configuration.gitlab.project }}.git" \
+      HEAD:refs/heads/{{ configuration.gitops.branch }}
+
+    git worktree remove --force "$worktree"
+  args:
+    chdir: "{{ repo_root }}"
+  no_log: true
+
+- name: GitLab ready
+  ansible.builtin.debug:
+    msg:
+      - "GitLab: https://{{ gitlab_host }}"
+      - "Repo: {{ gitlab_repo_url }} ({{ configuration.gitops.branch }})"
+      - "Submodule mirror: {{ gitlab_submodule_repo_url }}"
+      - "Rendered files published: {{ templated_config_files | length }}"
 
 # --- Restore from backup if available ---
 
