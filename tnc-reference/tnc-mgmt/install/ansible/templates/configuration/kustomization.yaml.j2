@@ -49,3 +49,31 @@ resources:
 {% if 'cnv' in configuration.components %}
   - other-crs/optional/cnv/
 {% endif %}
+
+# The reference CRs target a disconnected mirror, so every Subscription ships
+# with source: redhat-operators-disconnected. Retarget them here rather than
+# rewriting the files in the staging area: most of them live in the
+# telco-reference submodule, which ArgoCD pulls straight from the GitLab
+# mirror, so a staging-area edit would apply locally and then be reverted by
+# the next ArgoCD sync.
+patches:
+  - target:
+      kind: Subscription
+    patch: |-
+      - op: replace
+        path: /spec/source
+        value: {{ configuration.catalog_source }}
+{% if 'acm' in configuration.components %}
+
+  # MultiClusterHub carries the catalog source inside JSON annotations, which
+  # the Subscription patch above does not reach.
+  - target:
+      kind: MultiClusterHub
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/installer.open-cluster-management.io~1mce-subscription-spec
+        value: '{"source": "{{ configuration.catalog_source }}", "installPlanApproval": "Automatic"}'
+      - op: replace
+        path: /metadata/annotations/installer.open-cluster-management.io~1oadp-subscription-spec
+        value: '{"source": "{{ configuration.catalog_source }}", "installPlanApproval": "Automatic"}'
+{% endif %}
