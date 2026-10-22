@@ -62,3 +62,13 @@
     - quayregistries
     verbs:
     - '*'
+
+- op: add
+  path: "/rules/-"
+  value:
+    apiGroups:
+    - hco.kubevirt.io
+    resources:
+    - hyperconvergeds
+    verbs:
+    - '*'
