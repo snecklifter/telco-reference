@@ -1,0 +1,111 @@
+---
+# Patches the ArgoCD CR that the ztp-argocd-plugins-installer Policy enforces
+# on the hub. The Policy is the single place the hub's own ArgoCD instance is
+# defined: ArgoCD syncs the Policy, ACM applies the CR. That indirection is
+# deliberate -- the controller is not directly reconciling its own Deployment,
+# so a change here does not interrupt the sync that delivered it.
+
+# Pinned plugin images
+- op: replace
+  path: "/spec/policy-templates/0/objectDefinition/spec/object-templates/0/objectDefinition/spec/repo/initContainers/0/image"
+  value: "registry.redhat.io/openshift4/ztp-site-generate-rhel8@sha256:72bd611130c4c5b925e028ac47551e0a114caae0f306fbe66647a83a38c538bb"
+- op: replace
+  path: "/spec/policy-templates/0/objectDefinition/spec/object-templates/0/objectDefinition/spec/repo/initContainers/1/image"
+  value: "registry.redhat.io/rhacm2/multicluster-operators-subscription-rhel9@sha256:53a1c0ac40e04d4417f235323db5ddb7a50462692c6cf895b21e30dfc717ecc8"
+
+# --- High availability ---
+
+# Replaces the single Redis with a 3-node Redis HA set plus HAProxy. Redis is
+# where ArgoCD caches manifests and cluster state, so it is the component
+# whose loss stalls reconciliation fleet-wide. Needs three schedulable nodes
+# for the anti-affinity rules to be satisfiable.
+- op: add
+  path: "/spec/policy-templates/0/objectDefinition/spec/object-templates/0/objectDefinition/spec/ha"
+  value:
+    enabled: true
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+
+# The application controller does not scale by plain replicas -- each replica
+# owns a shard of the managed clusters. This is the setting that matters for
+# fleet size: raise replicas as clusters are added.
+- op: add
+  path: "/spec/policy-templates/0/objectDefinition/spec/object-templates/0/objectDefinition/spec/controller/sharding"
+  value:
+    enabled: true
+    replicas: 3
+
+# Upstream requests 1 CPU / 2Gi against a 16 CPU / 32Gi limit. That gap is
+# wide for a sharded controller holding a fleet-sized cache: the scheduler
+# packs on requests, so each shard needs a realistic floor of its own.
+- op: replace
+  path: "/spec/policy-templates/0/objectDefinition/spec/object-templates/0/objectDefinition/spec/controller/resources/requests"
+  value:
+    cpu: "2"
+    memory: 8Gi
+
+# repo-server is CPU and memory bound during kustomize builds and is the
+# component that times out first on a large tree. Stateless, so plain
+# replicas apply.
+- op: add
+  path: "/spec/policy-templates/0/objectDefinition/spec/object-templates/0/objectDefinition/spec/repo/replicas"
+  value: 3
+- op: replace
+  path: "/spec/policy-templates/0/objectDefinition/spec/object-templates/0/objectDefinition/spec/repo/resources/requests"
+  value:
+    cpu: "1"
+    memory: 4Gi
+
+# API/UI. Stateless and sits behind the route, so two replicas remove it as a
+# single point of failure without needing more.
+- op: add
+  path: "/spec/policy-templates/0/objectDefinition/spec/object-templates/0/objectDefinition/spec/server"
+  value:
+    replicas: 2
+    resources:
+      limits:
+        cpu: "2"
+        memory: 4Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+
+# ApplicationSet generates the per-cluster Applications, so it scales with
+# fleet size too. HA is leader-election based -- the second replica is a
+# standby, not an active shard.
+- op: add
+  path: "/spec/policy-templates/0/objectDefinition/spec/object-templates/0/objectDefinition/spec/applicationSet"
+  value:
+    replicas: 2
+    resources:
+      limits:
+        cpu: "2"
+        memory: 2Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+
+# --- RBAC ---
+
+# ArgoCD has its own RBAC and OpenShift cluster-admin does not carry into it.
+# The stock policy only maps system:cluster-admins and cluster-admins, so a
+# user holding cluster-admin through a direct ClusterRoleBinding matches
+# nothing and the UI renders empty rather than erroring. Those two are always
+# kept; configuration.gitops.admin_groups adds to them. Membership reaches
+# OpenShift through the Keycloak groups claim, so an extra group has to exist
+# as an OpenShift Group for this to take effect.
+- op: add
+  path: "/spec/policy-templates/0/objectDefinition/spec/object-templates/0/objectDefinition/spec/rbac"
+  value:
+    scopes: "[groups]"
+    policy: |
+      g, system:cluster-admins, role:admin
+      g, cluster-admins, role:admin
+{% for group in configuration.gitops.admin_groups | default([]) %}
+      g, {{ group }}, role:admin
+{% endfor %}

@@ -66,6 +66,9 @@
       dest: overlays/quay/quay_secret-patch.yaml
       component: quay
       requires: vault
+    - src: gitops-ztp-plugins.yaml.j2
+      dest: overlays/gitops/ztp-plugins.yaml
+      component: gitops
   loop_control:
     label: "{{ item.dest | basename }}"
   when: >-

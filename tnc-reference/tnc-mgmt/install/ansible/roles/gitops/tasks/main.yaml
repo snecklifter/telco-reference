@@ -36,30 +36,10 @@
     deployment/openshift-gitops-server --timeout=300s
   changed_when: false
 
-# ArgoCD has its own RBAC and OpenShift cluster-admin does not carry into it.
-# The stock policy only maps the system:cluster-admins and cluster-admins
-# groups, so a user holding cluster-admin through a direct ClusterRoleBinding
-# matches nothing and the UI renders empty rather than erroring.
-- name: Grant ArgoCD admin to the configured OpenShift groups
-  ansible.builtin.command:
-    argv:
-      - oc
-      - --kubeconfig
-      - "{{ kubeconfig_path }}"
-      - -n
-      - openshift-gitops
-      - patch
-      - argocd
-      - openshift-gitops
-      - --type=merge
-      - -p
-      - "{{ {'spec': {'rbac': {'scopes': '[groups]', 'policy': argocd_rbac_policy}}} | to_json }}"
-  vars:
-    argocd_admin_groups: >-
-      {{ ['system:cluster-admins', 'cluster-admins']
-         + (configuration.gitops.admin_groups | default([])) }}
-    argocd_rbac_policy: "{% for group in argocd_admin_groups %}g, {{ group }}, role:admin\n{% endfor %}"
-  when: configuration.gitops.admin_groups | default([]) | length > 0
+# ArgoCD RBAC is no longer patched imperatively here. It is rendered from
+# configuration.gitops.admin_groups into overlays/gitops/ztp-plugins.yaml,
+# which patches the ArgoCD CR the ztp-argocd-plugins-installer Policy
+# enforces -- so the whole CR, RBAC included, is GitOps-managed.
 
 - name: Wait for MultiClusterHub to be running
   ansible.builtin.command: >
