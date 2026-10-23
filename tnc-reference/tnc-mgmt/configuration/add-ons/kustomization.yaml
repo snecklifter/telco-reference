@@ -1,0 +1,12 @@
+---
+# Synced by the hub-add-ons Application. values/ is deliberately not listed --
+# kustomize ignores those files, and ArgoCD reads them through $values on the
+# Applications instead.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - netbox-ns.yaml
+  - netbox-keycloak-externalsecret.yaml
+  - vault-app.yaml
+  - netbox-app.yaml

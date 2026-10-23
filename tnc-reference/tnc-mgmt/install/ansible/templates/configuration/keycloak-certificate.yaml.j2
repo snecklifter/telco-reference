@@ -1,0 +1,33 @@
+---
+# Keycloak now terminates TLS in the pod, so it needs a certificate in its
+# own namespace. The wildcard cert-manager issues lives in openshift-ingress
+# and secrets do not cross namespaces, hence a dedicated one here.
+#
+# Same ClusterIssuer as the wildcard and API certificates, so this is a
+# publicly trusted chain -- which is also what lets the route use reencrypt
+# without pinning a destination CA.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: keycloak-tls
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  commonName: "keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
+  dnsNames:
+    - "keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}"
+  isCA: false
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: letsencrypt-production
+  secretName: keycloak-tls-secret
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+  usages:
+    - server auth
+    - digital signature
+    - key encipherment

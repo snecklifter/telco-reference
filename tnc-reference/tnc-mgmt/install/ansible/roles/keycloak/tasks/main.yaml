@@ -6,13 +6,15 @@
     mode: "0644"
   loop:
     - src: keycloak-namespace.yaml.j2
-      dest: keycloak-namespace.yaml
+      dest: other-crs/optional/keycloak/keycloak-namespace.yaml
     - src: keycloak-cr.yaml.j2
-      dest: keycloak-cr.yaml
+      dest: other-crs/optional/keycloak/keycloak-cr.yaml
     - src: keycloak-route.yaml.j2
-      dest: keycloak-route.yaml
+      dest: other-crs/optional/keycloak/keycloak-route.yaml
+    - src: keycloak-certificate.yaml.j2
+      dest: other-crs/optional/keycloak/keycloak-certificate.yaml
     - src: keycloak-external-secrets.yaml.j2
-      dest: keycloak-external-secrets.yaml
+      dest: other-crs/optional/keycloak/keycloak-external-secrets.yaml
     - src: openshift-oauth.yaml.j2
       dest: openshift-oauth.yaml
   loop_control:
@@ -21,12 +23,12 @@
 - name: Create Keycloak namespace
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
-    apply -f {{ config_stage_dir }}/keycloak-namespace.yaml
+    apply -f {{ config_stage_dir }}/other-crs/optional/keycloak/keycloak-namespace.yaml
 
 - name: Apply Keycloak ExternalSecrets
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
-    apply -f {{ config_stage_dir }}/keycloak-external-secrets.yaml
+    apply -f {{ config_stage_dir }}/other-crs/optional/keycloak/keycloak-external-secrets.yaml
 
 - name: Wait for Keycloak secrets to sync from Vault
   ansible.builtin.command: >
@@ -89,13 +91,13 @@
 - name: Render Keycloak CNPG cluster manifest
   ansible.builtin.template:
     src: configuration/keycloak-cnpg-cluster.yaml.j2
-    dest: "{{ config_stage_dir }}/keycloak-cnpg-cluster.yaml"
+    dest: "{{ config_stage_dir }}/other-crs/optional/keycloak/keycloak-cnpg-cluster.yaml"
     mode: "0644"
 
 - name: Deploy CNPG PostgreSQL cluster for Keycloak
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
-    apply -f {{ config_stage_dir }}/keycloak-cnpg-cluster.yaml
+    apply -f {{ config_stage_dir }}/other-crs/optional/keycloak/keycloak-cnpg-cluster.yaml
 
 - name: Wait for Keycloak CNPG cluster to be ready
   ansible.builtin.command: >
@@ -110,15 +112,31 @@
 
 # --- Keycloak instance ---
 
+- name: Request the Keycloak serving certificate
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    apply -f {{ config_stage_dir }}/other-crs/optional/keycloak/keycloak-certificate.yaml
+
+# Keycloak terminates TLS itself, so it will not start without this secret.
+- name: Wait for the Keycloak certificate to be issued
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n keycloak get secret keycloak-tls-secret
+  register: kc_tls_secret
+  until: kc_tls_secret.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+
 - name: Deploy Keycloak
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
-    apply -f {{ config_stage_dir }}/keycloak-cr.yaml
+    apply -f {{ config_stage_dir }}/other-crs/optional/keycloak/keycloak-cr.yaml
 
 - name: Create Keycloak Route
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
-    apply -f {{ config_stage_dir }}/keycloak-route.yaml
+    apply -f {{ config_stage_dir }}/other-crs/optional/keycloak/keycloak-route.yaml
 
 - name: Wait for Keycloak to be ready
   ansible.builtin.command: >
@@ -212,6 +230,33 @@
   retries: 30
   delay: 10
   changed_when: false
+
+# --- Publish the realm signing key ---
+
+# Keycloak generates the realm's signing keypair, so unlike the client
+# secrets this cannot be seeded into Vault ahead of time. NetBox needs the
+# public half to validate ID tokens, and its values file is GitOps-managed,
+# so park it in Vault for the netbox-keycloak-config ExternalSecret to read.
+# The key is public -- it is served unauthenticated on the realm endpoint --
+# but Vault is where the rest of NetBox's OIDC config already lives.
+
+- name: Fetch the Keycloak realm signing key
+  ansible.builtin.uri:
+    url: "https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/{{ configuration.keycloak.realm }}"
+    validate_certs: false
+  register: keycloak_realm_info
+  until: keycloak_realm_info.json.public_key is defined
+  retries: 10
+  delay: 10
+
+- name: Store the realm signing key in Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv put {{ configuration.vault.secret_path }}/keycloak/realm
+    public_key={{ keycloak_realm_info.json.public_key }}'
+  no_log: true
 
 # --- OpenShift OAuth ---
 

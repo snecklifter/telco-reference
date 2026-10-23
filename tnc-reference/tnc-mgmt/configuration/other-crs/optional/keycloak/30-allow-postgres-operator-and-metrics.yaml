@@ -1,0 +1,51 @@
+---
+# The database operator reaches each instance's instance-manager API on 8000
+# to drive failover, switchover and backups. Deny it and the cluster still
+# serves queries but stops being managed -- it reports instances as unknown
+# and will not promote a replica when the primary goes.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-operator
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: keycloak-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: postgresql-operator-system
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+# The cluster sets enablePodMonitor, so Prometheus scrapes the exporter on
+# 9187. Without this the PodMonitor stays configured but every scrape times
+# out and the database silently drops off the dashboards.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-metrics
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: keycloak-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-monitoring
+      ports:
+        - protocol: TCP
+          port: 9187

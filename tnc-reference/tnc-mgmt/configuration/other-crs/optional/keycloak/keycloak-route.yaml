@@ -1,0 +1,22 @@
+---
+# Example values -- rendered from vars.yaml by stage_config and by the
+# keycloak role, which bootstraps from the same file. Edit the .j2 template.
+# Reencrypt rather than edge: Keycloak serves TLS on 8443 itself now, so the
+# router re-encrypts to the pod instead of speaking plain HTTP to 8080.
+# No destinationCACertificate is needed because keycloak-tls-secret holds a
+# publicly trusted chain from the same ClusterIssuer as the wildcard.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  host: keycloak.apps.mgmt1.example.com
+  to:
+    kind: Service
+    name: keycloak-service
+  port:
+    targetPort: https
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: Redirect

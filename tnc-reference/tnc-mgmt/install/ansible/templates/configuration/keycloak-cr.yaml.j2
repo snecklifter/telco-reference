@@ -5,24 +5,58 @@ metadata:
   name: keycloak
   namespace: keycloak
 spec:
-  instances: {{ configuration.keycloak.replicas | default(2) }}
+  instances: {{ configuration.keycloak.replicas | default(3) }}
+
+  additionalOptions:
+    - name: metrics-enabled
+      value: 'true'
+
+  # Keys are username and password, which is what the operator expects and
+  # what the keycloak-admin-secret ExternalSecret already produces.
+  bootstrapAdmin:
+    user:
+      secret: keycloak-admin-secret
+
   db:
     vendor: postgres
     host: keycloak-postgres-rw
     database: keycloak
-    port: 5432
     usernameSecret:
       name: keycloak-postgres-creds
       key: username
     passwordSecret:
       name: keycloak-postgres-creds
       key: password
+
   hostname:
     hostname: keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}
+
+  # Serves TLS itself rather than taking plain HTTP from the router, so the
+  # hop between router and pod is encrypted too. keycloak-tls-secret is
+  # issued by cert-manager -- see keycloak-certificate.yaml.j2. The route is
+  # reencrypt to match; nothing listens on 8080 any more.
   http:
-    httpEnabled: true
-  proxy:
-    headers: xforwarded
+    httpsPort: 8443
+    tlsSecret: keycloak-tls-secret
+
+  # The operator would otherwise create its own Ingress alongside the Route
+  # this repo manages.
+  ingress:
+    enabled: false
+
+  # Spread the instances across nodes. The instance label is the name of
+  # this CR, so it has to track metadata.name above -- a stale value here
+  # matches no pods and the constraint silently does nothing.
+  scheduling:
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: keycloak
+                app.kubernetes.io/instance: keycloak
+            topologyKey: kubernetes.io/hostname
+
   unsupported:
     podTemplate:
       spec:

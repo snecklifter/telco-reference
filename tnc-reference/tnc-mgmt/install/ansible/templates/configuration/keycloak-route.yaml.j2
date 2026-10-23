@@ -1,4 +1,8 @@
 ---
+# Reencrypt rather than edge: Keycloak serves TLS on 8443 itself now, so the
+# router re-encrypts to the pod instead of speaking plain HTTP to 8080.
+# No destinationCACertificate is needed because keycloak-tls-secret holds a
+# publicly trusted chain from the same ClusterIssuer as the wildcard.
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
@@ -10,7 +14,7 @@ spec:
     kind: Service
     name: keycloak-service
   port:
-    targetPort: http
+    targetPort: https
   tls:
-    termination: edge
+    termination: reencrypt
     insecureEdgeTerminationPolicy: Redirect

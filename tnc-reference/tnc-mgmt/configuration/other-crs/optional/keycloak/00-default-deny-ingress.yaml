@@ -1,0 +1,20 @@
+---
+# Baseline for the namespace: nothing may reach any pod in keycloak unless a
+# later policy allows it. NetworkPolicies are additive, so the rules that
+# follow open only the specific paths Keycloak and its database need.
+#
+# Ingress only. Egress is deliberately left unrestricted -- Keycloak reaches
+# the API server, DNS and the OIDC clients' hosts, and the database streams
+# backups to NooBaa, so an egress baseline needs its own exercise and would
+# break things quietly if guessed at.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress

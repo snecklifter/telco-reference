@@ -1,0 +1,80 @@
+---
+# Router traffic in, on 8443. Keycloak terminates TLS in the pod, so the
+# route is reencrypt and nothing listens on 8080 -- allowing 8080 here
+# would leave the route failing with no obvious cause.
+#
+# openshift-ingress is matched by its kubernetes.io/metadata.name label,
+# which the API server sets on every namespace, rather than the
+# policy-group.network.openshift.io/ingress label, which depends on the
+# network plugin and release.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-keycloak
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-ingress
+      ports:
+        - protocol: TCP
+          port: 8443
+---
+# The instances form an Infinispan cluster over JGroups to share sessions.
+# Without this the pods start but each keeps its own session cache, so
+# logins break as soon as the router sends a user to another replica.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-keycloak-clustering
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: keycloak
+      ports:
+        - protocol: TCP
+          port: 7800
+---
+# The CR sets metrics-enabled, which exposes Prometheus metrics on the
+# management port. Without this the endpoint is published but every scrape
+# times out.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-keycloak-metrics
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  podSelector:
+    matchLabels:
+      app: keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-monitoring
+      ports:
+        - protocol: TCP
+          port: 9000

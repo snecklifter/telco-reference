@@ -15,7 +15,11 @@ spec:
         immediateCheckpoint: false
         jobs: 2
       destinationPath: s3://keycloak-edb-backup/
-      endpointURL: {{ noobaa_s3_endpoint }}
+      # Derived rather than looked up live, so stage_config can render this
+      # before NooBaa exists on a first run. The route is s3 in
+      # openshift-storage, whose default host follows <route>-<namespace>.
+      # Override odf.s3_endpoint if that route carries a custom host.
+      endpointURL: {{ configuration.odf.s3_endpoint | default('https://s3-openshift-storage.apps.' ~ cluster.name ~ '.' ~ cluster.base_domain, true) }}
       s3Credentials:
         accessKeyId:
           key: ACCESS_KEY_ID

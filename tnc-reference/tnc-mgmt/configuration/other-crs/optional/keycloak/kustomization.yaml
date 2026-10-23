@@ -1,0 +1,22 @@
+---
+# Keycloak's declarative surface. The realm import is deliberately absent:
+# it embeds six OIDC client secrets read from Vault at run time, so it stays
+# with the keycloak role, which seeds the realm as part of bootstrap.
+#
+# The database's cnpg-s3-backup-creds secret is still created by the role:
+# it is built from the NooBaa account secret, which is a bootstrap concern.
+# The Cluster itself is here, so ArgoCD holds its shape afterwards.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - keycloak-namespace.yaml
+  - keycloak-external-secrets.yaml
+  - keycloak-cr.yaml
+  - keycloak-certificate.yaml
+  - keycloak-cnpg-cluster.yaml
+  - keycloak-route.yaml
+  - 00-default-deny-ingress.yaml
+  - 10-allow-ingress-to-keycloak.yaml
+  - 20-allow-postgres-access.yaml
+  - 30-allow-postgres-operator-and-metrics.yaml

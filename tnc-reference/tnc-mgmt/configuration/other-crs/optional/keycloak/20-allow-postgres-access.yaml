@@ -1,0 +1,55 @@
+---
+# Who may reach the database on 5432.
+#
+# The source is the keycloak namespace rather than the app: keycloak pods
+# alone. Keycloak's own machinery talks to this database from more than the
+# server pods -- the operator's realm import runs as a Job, and backup and
+# restore run in pods the database operator creates -- and those carry
+# labels this repo does not control. Namespace scope still satisfies the
+# requirement that nothing outside Keycloak reaches the database, because
+# the only workloads in this namespace are Keycloak and its database.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-from-keycloak
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: keycloak-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+# The database instances replicate between themselves on the same port. This
+# is matched by the rule above today, since the instances sit in this
+# namespace, but it is stated separately so that tightening the rule above
+# to specific pods later cannot silently break replication.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-postgres-replication
+  namespace: keycloak
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: keycloak-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: keycloak-postgres
+      ports:
+        - protocol: TCP
+          port: 5432

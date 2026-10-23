@@ -1,0 +1,24 @@
+---
+# Example values -- rendered from vars.yaml by stage_config.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hub-add-ons
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  project: infra
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: openshift-gitops
+  source:
+    repoURL: "https://placeholder.example.com/repo.git"
+    targetRevision: "tnc7.0-release-4.22"
+    path: "tnc-reference/tnc-mgmt/configuration/add-ons"
+  syncPolicy:
+    automated:
+      allowEmpty: true
+      selfHeal: true
+      prune: true

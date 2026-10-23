@@ -1,0 +1,40 @@
+---
+# Vault, from the upstream Helm chart with the values file held in this repo.
+#
+# Two sources rather than one: the chart lives on a Helm repo and the values
+# on GitLab, so the second source carries ref: values purely so the first can
+# address it as $values. That is the only way an Application can combine a
+# remote chart with in-repo values.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  project: infra
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: vault
+  sources:
+    - repoURL: https://helm.releases.hashicorp.com
+      chart: vault
+      targetRevision: "{{ configuration.vault.chart_version }}"
+      helm:
+        releaseName: vault
+        valueFiles:
+          - $values/tnc-reference/tnc-mgmt/configuration/add-ons/values/vault-values.yaml
+    - repoURL: "{{ configuration.gitops.repo_url | default('https://placeholder.example.com/repo.git') }}"
+      targetRevision: "{{ configuration.gitops.branch }}"
+      ref: values
+  syncPolicy:
+    automated:
+      allowEmpty: true
+      selfHeal: true
+      # Vault holds the unseal keys and every OIDC client secret, and its
+      # PVCs are not recreatable from git. Never let a bad render prune it.
+      prune: false
+    syncOptions:
+      - CreateNamespace=true

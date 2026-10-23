@@ -66,25 +66,65 @@
       dest: overlays/quay/quay_secret-patch.yaml
       component: quay
       requires: vault
+    # App-of-apps for the Helm-based add-ons. The Applications and their
+    # values files both carry cluster-specific values, so all of them are
+    # rendered here and published rather than committed.
+    - src: hub-add-ons-app.yaml.j2
+      dest: other-crs/optional/hub-add-ons/hub-add-ons-app.yaml
+      component: hub-add-ons
+    - src: add-ons-vault-app.yaml.j2
+      dest: add-ons/vault-app.yaml
+      component: hub-add-ons
+    - src: add-ons-vault-values.yaml.j2
+      dest: add-ons/values/vault-values.yaml
+      component: hub-add-ons
+    - src: add-ons-netbox-app.yaml.j2
+      dest: add-ons/netbox-app.yaml
+      component: hub-add-ons
+    - src: add-ons-netbox-values.yaml.j2
+      dest: add-ons/values/netbox-values.yaml
+      component: hub-add-ons
+    - src: netbox-keycloak-externalsecret.yaml.j2
+      dest: add-ons/netbox-keycloak-externalsecret.yaml
+      component: hub-add-ons
     - src: gitops-ztp-plugins.yaml.j2
       dest: overlays/gitops/ztp-plugins.yaml
       component: gitops
+    # Keycloak's declarative surface. The keycloak role renders these same
+    # templates to the same paths when it bootstraps, so there is one copy
+    # rather than two that can drift.
+    - src: keycloak-namespace.yaml.j2
+      dest: other-crs/optional/keycloak/keycloak-namespace.yaml
+      component: keycloak
+    - src: keycloak-external-secrets.yaml.j2
+      dest: other-crs/optional/keycloak/keycloak-external-secrets.yaml
+      component: keycloak
+    - src: keycloak-cr.yaml.j2
+      dest: other-crs/optional/keycloak/keycloak-cr.yaml
+      component: keycloak
+    - src: keycloak-route.yaml.j2
+      dest: other-crs/optional/keycloak/keycloak-route.yaml
+      component: keycloak
+    # No requires: certmanager here -- certmanager is a role that always
+    # runs, not a component, so the guard would never be satisfied and this
+    # would silently fall back to the committed example hostname.
+    - src: keycloak-certificate.yaml.j2
+      dest: other-crs/optional/keycloak/keycloak-certificate.yaml
+      component: keycloak
+    - src: keycloak-cnpg-cluster.yaml.j2
+      dest: other-crs/optional/keycloak/keycloak-cnpg-cluster.yaml
+      component: keycloak
   loop_control:
     label: "{{ item.dest | basename }}"
   when: >-
     (item.component == '_always' or item.component in configuration.components)
     and (item.requires | default('') == '' or item.requires in configuration.components)
-  register: config_template_results
 
-# The committed copies of these files carry example values from another
-# cluster, so the tree pushed to GitLab for ArgoCD has to carry the rendered
-# versions instead -- see the gitlab role. Derive the list from what the loop
-# above actually rendered rather than restating it, so the two cannot drift.
-- name: Record which configuration files were rendered from templates
-  ansible.builtin.set_fact:
-    templated_config_files: >-
-      {{ config_template_results.results | rejectattr('skipped', 'defined')
-         | map(attribute='item.dest') | list }}
+# No list of rendered files is kept here. The gitlab role works out what to
+# publish by comparing the staging area against the committed tree, which
+# also catches files rendered by other roles -- a list built here covered
+# only this loop, and anything templating into the tree elsewhere silently
+# published the committed example instead.
 
 - name: Find all YAML files in staging area reference-crs and other-crs
   ansible.builtin.find:

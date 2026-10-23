@@ -123,6 +123,7 @@ configuration:
     - vault
     - quay
     - logging
+    - hub-add-ons    # app-of-apps for the Helm add-ons (vault, netbox)
     - loki            # log store for logging; enable both or neither
     - cnv
     - keycloak
@@ -168,7 +169,9 @@ configuration:
   # Deployed before GitLab so OIDC clients are available at GitLab startup.
   keycloak:
     realm: openshift
-    replicas: 2
+    # requiredDuringScheduling anti-affinity spreads these one per node, so
+    # this cannot exceed the number of schedulable workers.
+    replicas: 3
 
     # OIDC client for THIS cluster -- the hub the playbook is deploying. The
     # client is created in the realm, its secret is synced into openshift-config

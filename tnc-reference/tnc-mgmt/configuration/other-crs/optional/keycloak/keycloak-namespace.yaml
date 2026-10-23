@@ -1,0 +1,7 @@
+---
+# Example values -- rendered from vars.yaml by stage_config and by the
+# keycloak role, which bootstraps from the same file. Edit the .j2 template.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: keycloak

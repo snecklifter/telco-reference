@@ -207,15 +207,6 @@
 # --- Render the GitOps patches before publishing, so the pushed tree agrees
 # --- with what this playbook applies locally
 
-- name: Require the rendered file list from stage_config
-  ansible.builtin.assert:
-    that: templated_config_files is defined
-    fail_msg: >-
-      templated_config_files is unset, so the stage_config role did not run in
-      this play. Publishing now would push the committed example values and
-      hub-config would overwrite its own repoURL with the example one. Re-run
-      without skipping stage_config.
-
 - name: Template GitOps patches with GitLab credentials
   ansible.builtin.template:
     src: "configuration/{{ item.src }}"
@@ -238,14 +229,7 @@
       dest: overlays/gitops/ztp-repo-secret-patch.yaml
   loop_control:
     label: "{{ item.dest | basename }}"
-  register: gitops_template_results
   no_log: true
-
-- name: Add the GitOps patches to the rendered file list
-  ansible.builtin.set_fact:
-    templated_config_files: >-
-      {{ templated_config_files
-         + (gitops_template_results.results | map(attribute='item.dest') | list) }}
 
 # --- Publish to GitLab ---
 
@@ -294,16 +278,42 @@
     chdir: "{{ repo_root }}"
 
 # ArgoCD syncs the same path this playbook applies with 'oc apply -k', but the
-# committed overlays hold example values from another cluster -- including a
-# repoURL that hub-config would use to overwrite its own source. Publish the
-# rendered versions so both paths converge on the same manifests.
+# ArgoCD syncs the same path this playbook applies with 'oc apply -k', but
+# the committed overlays hold example values from another cluster -- a
+# repoURL hub-config would use to overwrite its own source, a Keycloak
+# hostname belonging to a different hub. Publish the rendered versions so
+# both paths converge on the same manifests.
+#
+# Which files those are is discovered rather than listed. stage_config seeds
+# the staging area with cp -rL, so any file that now differs from the
+# committed tree was rendered or rewritten by some role along the way --
+# whether that was stage_config, keycloak, gitlab or anything added later. A
+# hand-maintained list only covered what stage_config itself rendered, so a
+# role templating into the tree on its own published the example instead,
+# and nothing failed to say so.
+#
+# reference-crs and telco-reference are excluded: both resolve into the
+# submodule, which is a symlink and a gitlink in the published tree rather
+# than files this push can write.
+- name: Find staged files that differ from the committed tree
+  ansible.builtin.shell: |
+    set -eu
+    cd {{ config_stage_dir | quote }}
+    find . -type f \( -name '*.yaml' -o -name '*.yml' -o -name '*.json' \) \
+      ! -path './reference-crs/*' ! -path './telco-reference/*' -print |
+    while IFS= read -r f; do
+      cmp -s "$f" {{ config_src_dir | quote }}/"${f#./}" || printf '%s\n' "${f#./}"
+    done
+  register: staged_diff
+  changed_when: false
+
 - name: Publish the rendered configuration instead of the committed examples
   ansible.builtin.copy:
     src: "{{ config_stage_dir }}/{{ item }}"
     dest: "{{ gitlab_push_worktree }}/{{ config_rel_dir }}/{{ item }}"
     mode: "0644"
     remote_src: true
-  loop: "{{ templated_config_files }}"
+  loop: "{{ staged_diff.stdout_lines }}"
   loop_control:
     label: "{{ item }}"
 
@@ -346,7 +356,7 @@
       - "GitLab: https://{{ gitlab_host }}"
       - "Repo: {{ gitlab_repo_url }} ({{ configuration.gitops.branch }})"
       - "Submodule mirror: {{ gitlab_submodule_repo_url }}"
-      - "Rendered files published: {{ templated_config_files | length }}"
+      - "Rendered files published: {{ staged_diff.stdout_lines | length }}"
 
 # --- Restore from backup if available ---
 

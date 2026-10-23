@@ -1,0 +1,3 @@
+---
+# Example values -- rendered from vars.yaml by stage_config into the staging
+# area and published from there. Edit the .j2 template, not this file.
