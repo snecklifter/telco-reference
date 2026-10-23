@@ -66,6 +66,27 @@
       dest: overlays/quay/quay_secret-patch.yaml
       component: quay
       requires: vault
+    # App-of-apps for the Helm-based add-ons. The Applications and their
+    # values files both carry cluster-specific values, so all of them are
+    # rendered here and published rather than committed.
+    - src: hub-add-ons-app.yaml.j2
+      dest: other-crs/optional/hub-add-ons/hub-add-ons-app.yaml
+      component: hub-add-ons
+    - src: add-ons-vault-app.yaml.j2
+      dest: add-ons/vault-app.yaml
+      component: hub-add-ons
+    - src: add-ons-vault-values.yaml.j2
+      dest: add-ons/values/vault-values.yaml
+      component: hub-add-ons
+    - src: add-ons-netbox-app.yaml.j2
+      dest: add-ons/netbox-app.yaml
+      component: hub-add-ons
+    - src: add-ons-netbox-values.yaml.j2
+      dest: add-ons/values/netbox-values.yaml
+      component: hub-add-ons
+    - src: netbox-keycloak-externalsecret.yaml.j2
+      dest: add-ons/netbox-keycloak-externalsecret.yaml
+      component: hub-add-ons
     - src: gitops-ztp-plugins.yaml.j2
       dest: overlays/gitops/ztp-plugins.yaml
       component: gitops

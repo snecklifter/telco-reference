@@ -123,6 +123,7 @@ configuration:
     - vault
     - quay
     - logging
+    - hub-add-ons    # app-of-apps for the Helm add-ons (vault, netbox)
     - loki            # log store for logging; enable both or neither
     - cnv
     - keycloak

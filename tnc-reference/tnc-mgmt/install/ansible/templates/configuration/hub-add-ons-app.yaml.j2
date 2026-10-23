@@ -1,0 +1,27 @@
+---
+# App of apps. hub-config renders this one Application; it in turn syncs
+# configuration/add-ons, which holds an Application per add-on. Keeping the
+# add-ons behind their own parent means a broken chart cannot block the rest
+# of the hub configuration from reconciling.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hub-add-ons
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  project: infra
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: openshift-gitops
+  source:
+    repoURL: "{{ configuration.gitops.repo_url | default('https://placeholder.example.com/repo.git') }}"
+    targetRevision: "{{ configuration.gitops.branch }}"
+    path: "tnc-reference/tnc-mgmt/configuration/add-ons"
+  syncPolicy:
+    automated:
+      allowEmpty: true
+      selfHeal: true
+      prune: true

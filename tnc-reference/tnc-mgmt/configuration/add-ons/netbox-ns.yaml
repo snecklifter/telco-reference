@@ -1,0 +1,10 @@
+---
+# The netbox Application creates this too via CreateNamespace=true, but the
+# ExternalSecret below lands in it first, so declare it with an earlier wave
+# rather than racing the Helm sync.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netbox
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"

@@ -213,6 +213,33 @@
   delay: 10
   changed_when: false
 
+# --- Publish the realm signing key ---
+
+# Keycloak generates the realm's signing keypair, so unlike the client
+# secrets this cannot be seeded into Vault ahead of time. NetBox needs the
+# public half to validate ID tokens, and its values file is GitOps-managed,
+# so park it in Vault for the netbox-keycloak-config ExternalSecret to read.
+# The key is public -- it is served unauthenticated on the realm endpoint --
+# but Vault is where the rest of NetBox's OIDC config already lives.
+
+- name: Fetch the Keycloak realm signing key
+  ansible.builtin.uri:
+    url: "https://keycloak.apps.{{ cluster.name }}.{{ cluster.base_domain }}/realms/{{ configuration.keycloak.realm }}"
+    validate_certs: false
+  register: keycloak_realm_info
+  until: keycloak_realm_info.json.public_key is defined
+  retries: 10
+  delay: 10
+
+- name: Store the realm signing key in Vault
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }}
+    vault kv put {{ configuration.vault.secret_path }}/keycloak/realm
+    public_key={{ keycloak_realm_info.json.public_key }}'
+  no_log: true
+
 # --- OpenShift OAuth ---
 
 - name: Configure OpenShift OAuth with Keycloak

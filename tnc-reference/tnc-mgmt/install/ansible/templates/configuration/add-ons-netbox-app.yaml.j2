@@ -1,0 +1,43 @@
+---
+# NetBox, from the upstream Helm chart with the values file held in this repo.
+# Same two-source arrangement as vault: remote chart, in-repo values addressed
+# through $values.
+#
+# The Keycloak client secret and realm public key are deliberately absent from
+# the values file. They arrive through the netbox-keycloak-config
+# ExternalSecret, which the chart loads as an extra config fragment -- see
+# values/netbox-values.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: netbox
+  namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  project: infra
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: netbox
+  sources:
+    - repoURL: https://charts.netbox.oss.netboxlabs.com
+      chart: netbox
+      targetRevision: "{{ configuration.netbox.chart_version }}"
+      helm:
+        releaseName: netbox
+        valueFiles:
+          - $values/tnc-reference/tnc-mgmt/configuration/add-ons/values/netbox-values.yaml
+    - repoURL: "{{ configuration.gitops.repo_url | default('https://placeholder.example.com/repo.git') }}"
+      targetRevision: "{{ configuration.gitops.branch }}"
+      ref: values
+  syncPolicy:
+    automated:
+      allowEmpty: true
+      selfHeal: true
+      # The database lives in a CNPG cluster outside this Application, but
+      # the chart owns PVCs for media and reports. Leave pruning off until
+      # the add-on has been through an upgrade cycle.
+      prune: false
+    syncOptions:
+      - CreateNamespace=true

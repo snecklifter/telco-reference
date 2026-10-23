@@ -54,6 +54,12 @@ resources:
 {% if 'cnv' in configuration.components %}
   - other-crs/optional/cnv/
 {% endif %}
+{% if 'hub-add-ons' in configuration.components %}
+  # Creates the hub-add-ons Application, which in turn syncs
+  # configuration/add-ons. Only the parent is rendered here -- the children
+  # are not in this kustomization, so nothing manages them twice.
+  - other-crs/optional/hub-add-ons/
+{% endif %}
 
 # The reference CRs target a disconnected mirror, so every Subscription ships
 # with source: redhat-operators-disconnected. Retarget them here rather than

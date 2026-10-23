@@ -1,0 +1,58 @@
+global:
+  tlsDisable: true
+  openshift: true
+  serverTelemetry:
+    prometheusOperator: true
+
+injector:
+  image:
+    repository: {{ configuration.vault.injector_image }}
+    tag: {{ configuration.vault.injector_image_tag }}
+  replicas: {{ configuration.vault.injector_replicas }}
+  leaderElector:
+    enabled: false
+  metrics:
+    enabled: true
+
+server:
+  image:
+    repository: {{ configuration.vault.image }}
+    tag: {{ configuration.vault.image_tag }}
+  enterpriseLicense:
+    secretName: vault-ent-license
+  dev:
+    enabled: false
+  auditStorage:
+    enabled: true
+    size: {{ configuration.vault.audit_storage_size }}
+    storageClass: {{ configuration.vault.storage_class }}
+  dataStorage:
+    enabled: true
+    size: {{ configuration.vault.data_storage_size }}
+    storageClass: {{ configuration.vault.storage_class }}
+  ha:
+    enabled: true
+    replicas: {{ configuration.vault.replicas }}
+    raft:
+      enabled: true
+      setNodeId: true
+      config: |
+        ui = true
+        disable_performance_standby = true
+        listener "tcp" {
+          tls_disable = 1
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+        }
+        telemetry {
+          prometheus_retention_time = "10m"
+          disable_hostname = true
+          go_metrics = true
+        }
+        storage "raft" {
+          path = "/vault/data"
+        }
+        log_level = "info"
+        service_registration "kubernetes" {}
+  ui:
+    enabled: true
