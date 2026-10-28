@@ -235,3 +235,87 @@
     - poolers
     verbs:
     - '*'
+
+# The gitlab Application brings two more groups the hub role has never
+# needed. Same shape as every previous round of this: a kind moves into the
+# tree, ArgoCD has no permission for it, and the Application stops
+# partway with the objects ansible already applied still standing -- so it
+# reads as "not deployed" rather than as an RBAC error.
+
+- op: add
+  path: "/rules/-"
+  value:
+    apiGroups:
+    - apps.gitlab.com
+    resources:
+    - gitlabs
+    verbs:
+    - '*'
+
+- op: add
+  path: "/rules/-"
+  value:
+    apiGroups:
+    - noobaa.io
+    resources:
+    # The GitLab object storage account. backingstores and bucketclasses
+    # are listed because the same overlay reaches for them when object
+    # storage is reconfigured, and finding out one at a time has cost four
+    # rounds already.
+    - noobaaaccounts
+    - backingstores
+    - bucketclasses
+    verbs:
+    - '*'
+
+# The last four groups present in the tree. argoproj.io and
+# operators.coreos.com demonstrably sync today, so the stock controller
+# role already covers them and these rules are redundant -- but leaving
+# them out is what made the role's coverage a question rather than a fact,
+# and that question has cost four rounds of the same bug. The rule is now
+# simply: every apiGroup this tree contains is granted here.
+
+- op: add
+  path: "/rules/-"
+  value:
+    apiGroups:
+    - argoproj.io
+    resources:
+    - applications
+    - applicationsets
+    - appprojects
+    verbs:
+    - '*'
+
+- op: add
+  path: "/rules/-"
+  value:
+    apiGroups:
+    - operators.coreos.com
+    resources:
+    - subscriptions
+    - operatorgroups
+    - installplans
+    - clusterserviceversions
+    verbs:
+    - '*'
+
+- op: add
+  path: "/rules/-"
+  value:
+    apiGroups:
+    - storage.k8s.io
+    resources:
+    - storageclasses
+    verbs:
+    - '*'
+
+- op: add
+  path: "/rules/-"
+  value:
+    apiGroups:
+    - apps.open-cluster-management.io
+    resources:
+    - gitopsclusters
+    verbs:
+    - '*'
