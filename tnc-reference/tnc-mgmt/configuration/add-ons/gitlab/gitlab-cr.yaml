@@ -8,7 +8,7 @@ metadata:
   namespace: gitlab-system
 spec:
   chart:
-    version: "10.1.8"
+    version: "10.5.1"
     values:
       certmanager:
         install: false
@@ -78,10 +78,21 @@ spec:
           pages:
             name: docs.apps.mgmt1.example.com
         ingress:
+          # Tells the chart the deployment is edge-terminated. The routes do
+          # the terminating; this is how the chart learns that, since it
+          # creates no Ingress of its own.
+          annotations:
+            route.openshift.io/termination: edge
           class: none
           configureCertmanager: false
-          tls:
-            enabled: false
+          # No tls block on purpose. Setting tls.enabled false here does not
+          # just pick a URL scheme -- it tells the chart the deployment is
+          # not TLS terminated anywhere, and webservice and workhorse are
+          # configured accordingly. The routes terminate at the edge, so
+          # that is wrong, and the Web IDE is what notices: it fails to
+          # complete its OAuth exchange while ordinary pages are unaffected.
+          # Omitted, it defaults to true, which is what a working instance
+          # of this deployment runs with.
         minio:
           enabled: false
         pages:

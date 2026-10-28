@@ -307,8 +307,11 @@ configuration:
   # GitLab instance deployed on this cluster (before ArgoCD, needs ODF)
   # Chart version must match the gitlab-operator version — check with:
   #   oc -n gitlab-system get csv -o jsonpath='{.items[0].spec.version}'
+  # The operator is pinned to v3.5.1 by the hub-operators policy, so the
+  # chart tracks its 10.5.x line. These two drifted apart once already and
+  # the operator reconciles a chart it was not built against when they do.
   gitlab:
-    chart_version: "10.1.8"
+    chart_version: "10.5.1"
     group: telco
     project: telco-reference
     # The telco-reference git submodule is mirrored into its own project so the
