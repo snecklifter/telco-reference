@@ -83,6 +83,7 @@
         'gitlab-pages-storage',
         'gitlab-dependency-proxy',
         'gitlab-backup-storage',
+        'gitlab-terraform-state',
         'gitlab-tmp-storage',
         'gitlab-registry-storage',
         'gitlab-edb-backup',
@@ -107,14 +108,14 @@
 - name: Set S3 connection YAML
   ansible.builtin.set_fact:
     gitlab_s3_connection: |-
-      provider: AWS
-      aws_access_key_id: {{ noobaa_access_key }}
-      aws_secret_access_key: {{ noobaa_secret_key }}
-      aws_signature_version: 4
-      host: {{ noobaa_s3_route.stdout }}
-      endpoint: {{ noobaa_s3_endpoint }}
-      path_style: true
-      region: us-east-1
+      access_key = {{ noobaa_access_key }}
+      secret_key = {{ noobaa_secret_key }}
+      host_base = {{ noobaa_s3_route.stdout }}
+      host_bucket = {{ noobaa_s3_endpoint }}/%(bucket)s
+      preserve_attrs = False
+      signature_v2 = True
+      use_https = True
+      bucket_location = eu
   no_log: true
 
 - name: Write object storage connection to Vault
