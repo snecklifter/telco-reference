@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: csi-kms-connection-details
+  namespace: openshift-storage
+data:
+  vault-kms: |
+    {
+      "KMS_PROVIDER": "vaulttenantsa",
+      "KMS_SERVICE_NAME": "vault-kms",
+      "VAULT_ADDR": "https://vault.vault.svc:8200",
+      "VAULT_BACKEND_PATH": "{{ configuration.vault.secret_path }}",
+      "VAULT_AUTH_METHOD": "kubernetes",
+      "VAULT_AUTH_KUBERNETES_ROLE": "odf-kms",
+      "VAULT_AUTH_MOUNT_PATH": "{{ configuration.vault.mount_path }}",
+      "VAULT_BACKEND": "kv-v2",
+      "VAULT_TLS_SERVER_NAME": "vault.vault.svc",
+      "VAULT_NAMESPACE": ""
+    }

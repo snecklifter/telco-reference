@@ -10,3 +10,12 @@
 - op: replace
   path: /spec/storageDeviceSets/0/dataPVCTemplate/spec/storageClassName
   value: "{{ configuration.odf.storage_class }}"
+{% if configuration.odf.encryption | default(false) %}
+
+- op: add
+  path: /spec/encryption
+  value:
+    clusterWide: true
+    kms:
+      enable: true
+{% endif %}

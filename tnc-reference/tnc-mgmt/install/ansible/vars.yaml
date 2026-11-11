@@ -383,6 +383,7 @@ configuration:
     storage_class: local-sc
     default_storage_class: ocs-storagecluster-ceph-rbd
     filesystem_storage_class: ocs-storagecluster-cephfs
+    encryption: true
 
   # ACM AgentServiceConfig — OS images for spoke cluster provisioning
   acm:

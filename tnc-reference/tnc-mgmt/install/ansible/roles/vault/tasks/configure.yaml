@@ -207,6 +207,40 @@
   no_log: true
   when: vault_aap_check.rc != 0
 
+- name: Write ODF KMS policy
+  ansible.builtin.shell: |
+    oc --kubeconfig {{ kubeconfig_path }} \
+      -n vault exec -i vault-0 -- \
+      sh -c 'VAULT_TOKEN={{ vault_root_token }} vault policy write odf-kms -' <<'POLICY'
+    path "{{ configuration.vault.secret_path }}/data/rook/*" {
+      capabilities = ["create", "read", "update", "delete"]
+    }
+    path "{{ configuration.vault.secret_path }}/metadata/rook/*" {
+      capabilities = ["read", "delete", "list"]
+    }
+    path "{{ configuration.vault.secret_path }}/delete/rook/*" {
+      capabilities = ["update"]
+    }
+    path "{{ configuration.vault.secret_path }}/destroy/rook/*" {
+      capabilities = ["update"]
+    }
+    POLICY
+  no_log: true
+  when: configuration.odf.encryption | default(false)
+
+- name: Create Kubernetes auth role for ODF KMS
+  ansible.builtin.command: >
+    oc --kubeconfig {{ kubeconfig_path }}
+    -n vault exec vault-0 --
+    sh -c 'VAULT_TOKEN={{ vault_root_token }} vault write
+    auth/{{ configuration.vault.mount_path }}/role/odf-kms
+    bound_service_account_names=rook-ceph-system,rook-ceph-osd,ceph-csi-cephfs-provisioner-sa,ceph-csi-rbd-provisioner-sa
+    bound_service_account_namespaces=openshift-storage
+    policies=odf-kms
+    ttl=1h'
+  no_log: true
+  when: configuration.odf.encryption | default(false)
+
 - name: Write DNS API credentials to Vault
   ansible.builtin.command: >
     oc --kubeconfig {{ kubeconfig_path }}
